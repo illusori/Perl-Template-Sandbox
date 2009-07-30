@@ -1,0 +1,11 @@
+^_build
+^Build$
+^blib
+^cover_db
+~$
+\.bak$
+^MANIFEST\.SKIP$
+CVS
+#defaults
+^Makefile$
+^pm_to_blib
