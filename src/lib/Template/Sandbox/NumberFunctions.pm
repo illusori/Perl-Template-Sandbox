@@ -42,11 +42,6 @@ __PACKAGE__->set_library_functions(
         } ),
     decimal  => ( two_args sub { sprintf( '%.' . $_[ 1 ] . 'f', $_[ 0 ] ) } ),
 
-    tan     => ( one_arg sub { sin( $_[ 0 ] ) / cos( $_[ 0 ] ) } ),
-    atan    => ( two_args sub { atan2( $_[ 0 ], $_[ 1 ] ) } ),
-    sin     => ( one_arg sub { sin( $_[ 0 ] ) } ),
-    cos     => ( one_arg sub { cos( $_[ 0 ] ) } ),
-
     exp     => ( one_arg sub { exp( $_[ 0 ] ) } ),
     log     => ( one_arg sub { log( $_[ 0 ] ) } ),
     pow     => ( two_args sub { $_[ 0 ] ** $_[ 1 ] } ),
@@ -66,8 +61,7 @@ __PACKAGE__->set_library_functions(
     );
 
 __PACKAGE__->set_library_tags(
-    'trig'     => [ qw/tan atan sin cos/ ],
-    'maths'    => [ qw/tan atan sin cos exp log pow sqrt/ ],
+    'maths'    => [ qw/exp log pow sqrt/ ],
     'display'  => [ qw/numeric currency accountant_currency decimal/ ],
     );
 
@@ -138,22 +132,11 @@ Note that this does not respect locale.
 
 Reformat C<number> for display to C<places> decimal places.
 
-=item C<tan( number )>
-
-=item C<atan( a, b )>
-
-=item C<sin( number )>
-
-=item C<cos( number )>
-
-Wrappers to corresponding Perl trig functions (or rudimentary unsafe
-hack for C<tan()>).
-
 =item C<exp( number )>
 
 =item C<log( number )>
 
-=item C<pow( number )>
+=item C<pow( number, exponent )>
 
 =item C<sqrt( number )>
 
@@ -184,13 +167,9 @@ Returns the min or max value from C<a> or C<b> accordingly.
 
 Exports all defined template functions in this library.
 
-=item :trig
-
-Exports C<tan>, C<atan>, C<sin> and C<cos>.
-
 =item :maths
 
-Exports C<tan>, C<atan>, C<sin>, C<cos>, C<exp>, C<log>, C<pow> and C<sqrt>.
+Exports C<exp>, C<log>, C<pow> and C<sqrt>.
 
 =item :display
 
