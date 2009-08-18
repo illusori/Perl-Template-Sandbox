@@ -18,7 +18,7 @@ my ( $num_single_tests );
 my ( $num_instance_imports, $num_import_tests );
 my ( $num_tests );
 
-$num_single_tests     = 21;
+$num_single_tests     = 25;
 $num_instance_imports = 2;
 $num_import_tests     = 11;
 
@@ -254,4 +254,25 @@ throws_ok { $template->set_template_string( $third_syntax ) }
     "verify class import of tag doesn't import extras";
 Template::Sandbox->unregister_template_function(
     qw/first_function second_function/
+    );
+
+#
+#  22-25: Test class import of tag.
+$pre_template = Template::Sandbox->new();
+Template::Sandbox::TestLibrary->import( qw/:all/ );
+$template = Template::Sandbox->new();
+lives_ok { $template->set_template_string(
+    $first_syntax . $second_syntax . $third_syntax ) }
+    "new template parse with class import of :all";
+is( ${$template->run()}, $first_expected . $second_expected . $third_expected,
+    "new template run of class import of :all" );
+lives_ok
+    { $pre_template->set_template_string(
+    $first_syntax . $second_syntax . $third_syntax ) }
+    "existing template parse with class import of tag";
+is( ${$pre_template->run()},
+    $first_expected . $second_expected . $third_expected,
+    "existing template run of class import of :all" );
+Template::Sandbox->unregister_template_function(
+    qw/first_function second_function third_function/
     );
