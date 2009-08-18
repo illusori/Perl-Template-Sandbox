@@ -15,15 +15,17 @@ use warnings;
 
 use Carp;
 use Class::Handle;
+use Clone;
 use Cwd ();
 use Data::Dumper;
+use Digest;
 use IO::File;
 use Log::Any;
 use Scalar::Util;
 use Storable;
 use Time::HiRes;
 
-my ( $total_time );
+my $total_time = 0;
 
 #my ( @function_table );
 
@@ -86,19 +88,19 @@ my %operators = (
                1 ],
     #  Comparison operators
     'cmp' => [ 95,  sub { $_[ OP_LHS ] cmp $_[ OP_RHS ] } ],
-    'ne'  => [ 94,  sub { $_[ OP_LHS ] ne  $_[ OP_RHS ] } ],
-    'eq'  => [ 93,  sub { $_[ OP_LHS ] eq  $_[ OP_RHS ] } ],
+    'ne'  => [ 94,  sub { $_[ OP_LHS ] ne  $_[ OP_RHS ] ? 1 : 0 } ],
+    'eq'  => [ 93,  sub { $_[ OP_LHS ] eq  $_[ OP_RHS ] ? 1 : 0 } ],
     '<=>' => [ 92,  sub { $_[ OP_LHS ] <=> $_[ OP_RHS ] } ],
-    '!='  => [ 91,  sub { $_[ OP_LHS ] !=  $_[ OP_RHS ] } ],
-    '=='  => [ 90,  sub { $_[ OP_LHS ] ==  $_[ OP_RHS ] } ],
-    'ge'  => [ 89,  sub { $_[ OP_LHS ] ge  $_[ OP_RHS ] } ],
-    'le'  => [ 88,  sub { $_[ OP_LHS ] le  $_[ OP_RHS ] } ],
-    'gt'  => [ 87,  sub { $_[ OP_LHS ] gt  $_[ OP_RHS ] } ],
-    'lt'  => [ 86,  sub { $_[ OP_LHS ] lt  $_[ OP_RHS ] } ],
-    '>='  => [ 85,  sub { $_[ OP_LHS ] >=  $_[ OP_RHS ] } ],
-    '<='  => [ 84,  sub { $_[ OP_LHS ] <=  $_[ OP_RHS ] } ],
-    '>'   => [ 83,  sub { $_[ OP_LHS ] >   $_[ OP_RHS ] } ],
-    '<'   => [ 82,  sub { $_[ OP_LHS ] <   $_[ OP_RHS ] } ],
+    '!='  => [ 91,  sub { $_[ OP_LHS ] !=  $_[ OP_RHS ] ? 1 : 0 } ],
+    '=='  => [ 90,  sub { $_[ OP_LHS ] ==  $_[ OP_RHS ] ? 1 : 0 } ],
+    'ge'  => [ 89,  sub { $_[ OP_LHS ] ge  $_[ OP_RHS ] ? 1 : 0 } ],
+    'le'  => [ 88,  sub { $_[ OP_LHS ] le  $_[ OP_RHS ] ? 1 : 0 } ],
+    'gt'  => [ 87,  sub { $_[ OP_LHS ] gt  $_[ OP_RHS ] ? 1 : 0 } ],
+    'lt'  => [ 86,  sub { $_[ OP_LHS ] lt  $_[ OP_RHS ] ? 1 : 0 } ],
+    '>='  => [ 85,  sub { $_[ OP_LHS ] >=  $_[ OP_RHS ] ? 1 : 0 } ],
+    '<='  => [ 84,  sub { $_[ OP_LHS ] <=  $_[ OP_RHS ] ? 1 : 0 } ],
+    '>'   => [ 83,  sub { $_[ OP_LHS ] >   $_[ OP_RHS ] ? 1 : 0 } ],
+    '<'   => [ 82,  sub { $_[ OP_LHS ] <   $_[ OP_RHS ] ? 1 : 0 } ],
 
     #  Assignment
     '='   => [ 75,  sub { $_[ SELF ]->_assign_var( $_[ OP_LHS ],
@@ -120,7 +122,7 @@ sub def_func
     my ( $ret, $flag, $val ) = @_;
     $ret = [ $ret ] if ref( $ret ) ne 'ARRAY';
     $ret->[ $flag ] = $val;
-#warn "def_func: ..." . tersedump( $ret );
+#warn "def_func: ..." . _tersedump( $ret );
     return( $ret );
 }
 
@@ -491,6 +493,7 @@ BEGIN
         undef_ok
         has_args no_args
         one_arg two_args three_args any_args
+        def_func
         );
     %Template::Sandbox::EXPORT_TAGS = (
         function_sugar => [ qw(
@@ -526,13 +529,21 @@ sub register_template_function
 
         $func = shift;
 
-        die "Bad template function '$name' to register_template_function(), " .
-            "expected sub ref or 'function_sugar'ed sub ref, got: $func"
+        #  TODO:  Carp has errors croaking from here.
+        $self->caller_error(
+            "Bad template function '$name' to register_template_function(), " .
+            "expected sub ref or 'function_sugar'ed sub ref, got: " .
+            ( ref( $func ) || "'$func'" ) )
             unless ref( $func ) eq 'ARRAY' or ref( $func ) eq 'CODE';
 
         #  do local $^W = undef; in calling block to suppress.
-        warn "Template function '$name' already exists, overwriting."
+        $self->caller_warning(
+            "Template function '$name' exists, overwriting." )
             if $^W and $local_functions->{ $name };
+
+        #  If they don't use the function sugar, we assume they're not fussy
+#  TODO: probably safer to error since constant/inconstant shouldn't be assumed
+        $func = any_args $func if ref( $func ) eq 'CODE';
 
         $local_functions->{ $name } = $func;
     }
@@ -554,7 +565,8 @@ sub unregister_template_function
 
     while( my $name = shift )
     {
-        warn "Template function '$name' does not exist."
+        $self->caller_warning(
+            "Template function '$name' does not exist, cannot be removed." )
             if $^W and not $local_functions->{ $name };
 
         delete $local_functions->{ $name };
@@ -598,17 +610,20 @@ sub register_template_syntax
 
         $syntax = shift;
 
-        die "Bad template syntax '$name' to register_template_syntax(), " .
-            "expected hash ref, got: $syntax"
+        #  TODO:  Carp has errors when croaking from here.
+        $self->caller_error(
+            "Bad template syntax '$name' to register_template_syntax(), " .
+            "expected hash ref, got: " . ( ref( $syntax ) || "'$syntax'" ) )
             unless ref( $syntax ) eq 'HASH';
 
-        die "Missing compile callback for syntax $name"
-             unless $syntax->{ compile_method };
-        die "Missing run callback for syntax $name"
-             unless $syntax->{ run_method };
+        $self->caller_error( "Missing compile callback for syntax $name" )
+             unless $syntax->{ compile };
+        $self->caller_error( "Missing run callback for syntax $name" )
+             unless $syntax->{ run };
 
         #  do local $^W = undef; in calling block to suppress.
-        warn "Template syntax '$name' already exists, overwriting."
+        $self->caller_warning(
+            "Template syntax '$name' exists, overwriting." )
             if $^W and $local_syntaxes->{ $name };
 
         $syntax = { %{$syntax} };
@@ -639,9 +654,16 @@ sub unregister_template_syntax
 
     while( my $name = shift )
     {
-        warn "Template syntax '$name' does not exist."
-            if $^W and not $local_syntaxes->{ $name };
+        unless( $local_syntaxes->{ $name } )
+        {
+            $self->caller_warning(
+                "Template syntax '$name' does not exist, cannot be removed." )
+                if $^W;
+            next;
+        }
 
+        delete $local_syntaxes->{ '.instr' }->{
+            $local_syntaxes->{ $name }->{ instr } };
         delete $local_syntaxes->{ $name };
     }
 }
@@ -657,7 +679,7 @@ sub get_valid_singular_constructor_param
 {
     my ( $self ) = @_;
 
-    return( qw/filename cache logger template_root
+    return( qw/template cache logger template_root
         ignore_module_dependencies/ );
 }
 
@@ -665,7 +687,8 @@ sub get_valid_multiple_constructor_param
 {
     my ( $self ) = @_;
 
-    return( qw/copy_global_functions template_function template_syntax/ );
+    return( qw/copy_global_functions template_function template_syntax
+        library/ );
 }
 
 #  TODO: implement these constructor options:
@@ -701,7 +724,7 @@ sub new
         }
         else
         {
-            $self->error( "Unknown constructor param: '$param_name'" );
+            $self->caller_error( "Unknown constructor param: '$param_name'" );
         }
     }
 
@@ -719,7 +742,7 @@ sub initialize
     #  Do this early in case anything needs logging.
     if( exists $param->{ logger } )
     {
-        $self->{ logger } = $param->{ logger };
+        $self->{ logger } = $param->{ logger } if $param->{ logger };
     }
     else
     {
@@ -728,7 +751,7 @@ sub initialize
 
     #  For the paranoid, to prevent other code changing them after
     #  we initialize.
-    $self->{ local_functions } = Storable::dclone( \%functions )
+    $self->{ local_functions } = Clone::clone( \%functions )
         if exists $param->{ copy_global_functions };
 
     if( exists $param->{ template_function } )
@@ -745,6 +768,13 @@ sub initialize
             $self->register_template_syntax( @{$arg} );
         }
     }
+    if( exists $param->{ library } )
+    {
+        foreach my $arg ( @{$param->{ library }} )
+        {
+#  TODO: library export
+        }
+    }
 
     $self->{ ignore_module_dependencies } =
         $param->{ ignore_module_dependencies }
@@ -754,8 +784,8 @@ sub initialize
         if exists $param->{ cache };
     $self->set_template_root( $param->{ template_root } )
         if exists $param->{ template_root };
-    $self->set_template( $param->{ filename } )
-        if exists $param->{ filename };
+    $self->set_template( $param->{ template } )
+        if exists $param->{ template };
 
     $self->{ vars }   = {};
     $self->{ debug }  = {};
@@ -772,13 +802,17 @@ sub get_template_candidates
 {
     my ( $self, $filename, $current_dir ) = @_;
 
-    return( $self->{ template_root } . '/' . $filename );
+    #  TODO:  probably should use File::Spec.
+    return( ( $self->{ template_root } ?
+        ( $self->{ template_root } . '/' ) : '' ) .
+        $filename );
 }
 
 sub get_include_candidates
 {
     my ( $self, $filename, $current_dir ) = @_;
 
+    #  TODO:  probably should use File::Spec.
     return( $current_dir . '/' . $filename );
 }
 
@@ -832,7 +866,7 @@ sub get_additional_dependencies
 {
     my ( $self ) = @_;
 
-    return( undef );
+    return( [] );
 }
 
 sub set_template
@@ -846,6 +880,7 @@ sub set_template
     $defines = $defines ? { %{$defines} } : {};
 
     #  PAGE is the leaf filename of what they _asked_ for.
+    #  TODO:  probably should use File::Spec.
     if( $filename =~ /^(.*)\/(.*?)$/ )
     {
         $defines->{ PAGE } = $2;
@@ -857,6 +892,7 @@ sub set_template
 
     $self->{ filename }    = $self->find_template( $filename, Cwd::cwd() );
     $defines->{ FILENAME } = $self->{ filename };
+    #  TODO:  probably should use File::Spec.
     $defines->{ DIR }      = ( $filename =~ /^(.*)\/(.*?)$/ ) ? $1 : '';
 
     $self->{ defines }        = $defines;
@@ -881,7 +917,7 @@ sub set_template
 
         $compiletime = time();  #  Before the compile, to be safe.
 
-        $self->{ dependencies } = $self->get_additional_dependencies() || [];
+        $self->{ dependencies } = $self->get_additional_dependencies();
 
         #  If we're caching, the validity of the cache depends on the
         #  last-modified of the template module as well as the template
@@ -945,7 +981,6 @@ sub set_template_string
     $defines->{ PAGE } = 'string';
 
     #  Erk.  Better way of making this cacheable surely?
-#  TODO:  erk, gets copied into pos for every instr.
     $self->{ filename }    = 'string:///' . $template_string;
     $defines->{ FILENAME } = $self->{ filename };
     $defines->{ DIR }      = Cwd::cwd();
@@ -972,7 +1007,7 @@ sub set_template_string
 
         $compiletime = time();  #  Before the compile, to be safe.
 
-        $self->{ dependencies } = $self->get_additional_dependencies() || [];
+        $self->{ dependencies } = $self->get_additional_dependencies();
 
         #  If we're caching, the validity of the cache depends on the
         #  last-modified of the template module as well as the template
@@ -1026,6 +1061,8 @@ sub _error_message
     my $self = shift;
     my ( $error, $pos );
 
+    $self = {} unless ref( $self );  #  Hack for calling as a class method.
+
     $error = join( '', @_ );
     $error = "Template " . ( $self->{ phase } ? $self->{ phase } . ' ' : '' ) .
         "error: $error";
@@ -1072,6 +1109,7 @@ sub log_error
 {
     my ( $self, $message ) = @_;
 
+    return unless ref( $self );  #  No logging if class method.
     $self->{ logger }->error( $message ) if $self->{ logger };
 }
 
@@ -1079,6 +1117,7 @@ sub log_warning
 {
     my ( $self, $message ) = @_;
 
+    return unless ref( $self );  #  No logging if class method.
     $self->{ logger }->warning( $message ) if $self->{ logger };
 }
 
@@ -1092,10 +1131,30 @@ sub error
     $self->fatal_exit( $message );
 }
 
+sub caller_error
+{
+    my $self = shift;
+    my ( $message );
+
+    $message = $self->_error_message( @_ );
+    $self->log_error( $message );
+    $self->caller_fatal_exit( $message );
+}
+
 sub fatal_exit
 {
     my ( $self, $message ) = @_;
 
+    die $message;
+}
+
+sub caller_fatal_exit
+{
+    my ( $self, $message ) = @_;
+
+#  TODO: restore once Carp stops dying with:
+#     Bizarre copy of HASH in sassign at [...]/Carp/Heavy.pm line 96.
+#    croak $message;
     die $message;
 }
 
@@ -1106,6 +1165,17 @@ sub warning
 
     $message = $self->_error_message( @_ );
     $self->log_warning( $message );
+    warn $message;
+}
+
+sub caller_warning
+{
+    my $self = shift;
+    my ( $message );
+
+    $message = $self->_error_message( @_ );
+    $self->log_warning( $message );
+    carp $message;
 }
 
 sub add_var
@@ -1196,11 +1266,23 @@ sub _define_value
     my ( $self, $defines, $define, $default, $quote ) = @_;
 
 #$self->warning( "replacing define '$define'" );
-    $define = defined( $defines->{ $define } ) ?
-        $defines->{ $define } :
-        ( defined( $default ) ?
-          $default :
-          "[undefined preprocessor define '$2']" );
+
+    if( $self->{ seen_defines }->{ $define }++ )
+    {
+        $define = "[recursive define '$define']";
+    }
+    elsif( defined( $defines->{ $define } ) )
+    {
+        $define = $defines->{ $define };
+    }
+    elsif( defined( $default ) )
+    {
+        $define = $default;
+    }
+    else
+    {
+        $define = "[undefined preprocessor define '$define']";
+    }
 
     $define = "'" . $self->_escape_string( $define ) . "'" if $quote;
 
@@ -1212,6 +1294,7 @@ sub _replace_defines
     my ( $self, $template_content, $defines ) = @_;
 
     #  Replace any preprocessor defines.
+    local $self->{ seen_defines } = {};
     1 while $template_content =~ s/\$\{('?)([A-Z0-9_]+)(?::([^\}]*))?\1\}/
         $self->_define_value( $defines, $2, $3, $1 )/gex;
 
@@ -1225,7 +1308,11 @@ sub _read_template
 
     push @{$self->{ dependencies }}, $filename;
 
-    $fh = new IO::File "< $filename" or confess "Unable to read $filename: $!";
+    $fh = IO::File->new( $filename, '<' );
+    #  TODO: $! can get trashed if $filename is interpolated - investigate
+    #  TODO: is this perl 5.10.0's $! bug, or mine?
+#    $self->caller_error( "Unable to read $filename: $!" ) unless $fh;
+    $self->caller_error( "Unable to read ", $filename, ": $!" ) unless $fh;
     {
         local $/;
         $template = <$fh>;
@@ -1233,7 +1320,7 @@ sub _read_template
     $fh->close;
 
     #  Replace any preprocessor defines.
-    $self->_replace_defines( $template, $defines );
+    $template = $self->_replace_defines( $template, $defines );
 
 #$self->warning( "Template becomes: $template" ) if $filename =~ /item_blueprint_activity_times_manufacturing.html/;
 
@@ -1245,7 +1332,7 @@ sub _read_template_from_string
     my ( $self, $template, $defines ) = @_;
 
     #  Replace any preprocessor defines.
-    $self->_replace_defines( $template, $defines );
+    $template = $self->_replace_defines( $template, $defines );
 
     return( $template );
 }
@@ -1291,25 +1378,26 @@ sub _parse_args
             $instr = 1;
         }
     }
-    #  Merge $[...] url args.
-    $instr = 0;
-    for( $count = 0; $count <= $#words; $count++ )
-    {
-        if( $instr )
-        {
-            $instr = 0 if $words[ $count ] =~ /\]\=/;
-            $words[ $count - 1 ] .= ' ' . $words[ $count ];
-            @words =
-                ( @words[ 0..$count - 1 ], @words[ $count + 1..$#words ] );
-            $count--;
-        }
-        else
-        {
-            next unless $words[ $count ] =~ /^\$\[/;
-            next if $words[ $count ] =~ /\]\=/;
-            $instr = 1;
-        }
-    }
+#  TODO: remove
+#    #  Merge $[...] url args.
+#    $instr = 0;
+#    for( $count = 0; $count <= $#words; $count++ )
+#    {
+#        if( $instr )
+#        {
+#            $instr = 0 if $words[ $count ] =~ /\]\=/;
+#            $words[ $count - 1 ] .= ' ' . $words[ $count ];
+#            @words =
+#                ( @words[ 0..$count - 1 ], @words[ $count + 1..$#words ] );
+#            $count--;
+#        }
+#        else
+#        {
+#            next unless $words[ $count ] =~ /^\$\[/;
+#            next if $words[ $count ] =~ /\]\=/;
+#            $instr = 1;
+#        }
+#    }
 
 #my ( $warning_happened );
 #local $SIG{__WARN__} = sub { $warning_happened = 1; print "Content-type: text/plain\n\n"; };
@@ -1387,14 +1475,15 @@ sub _compile_template
     $local_token_aliases = $self->{ local_token_aliases } || {};
     $local_syntaxes      = $self->{ local_syntaxes } || {};
 
-#  TODO: class-level syntaxes
+#  TODO: class-level syntax aliases
 #  TODO: split into class/instance versions and unroll to construct time?
 #  TODO: or generate-on-demand but class/instance copy invalidated on change.
     #  Egads!
     $local_syntax_regexp = join( ' | ',
-        map { join( ' \s+ ', map { '\Q' . $_ . '\E' } split( /\s+/, $_ ) ) }
+        map { join( ' \s+ ', split( /\s+/, $_ ) ) }
         grep( /^[^\.]/,
-            keys( %{$local_token_aliases} ), keys( %{$local_syntaxes} ) ) );
+            keys( %{$local_token_aliases} ), keys( %{$local_syntaxes} ),
+            values( %{$syntaxes{ '.instr' }} ) ) );
     $local_syntax_regexp = ' | ' . $local_syntax_regexp
         if $local_syntax_regexp;
 #  TODO: qr// it?  need to benchmark
@@ -1405,7 +1494,7 @@ sub _compile_template
     $self->{ pos_stack } = \@pos_stack;
     $self->{ phase }     = 'compile';
 
-my ( $dumpme );
+#my ( $dumpme );
     for( $i = 0; $i <= $#hunks; $i++ )
     {
         my ( $hunk, $pos, $lines, $queue_pos, $last, $next );
@@ -1468,8 +1557,9 @@ my ( $dumpme );
             #  empty lines in the output.
             #  Are we a zero-width token on a line by itself?
             if( $syntax->{ zero_width } and
-                $#compiled >= 0 and $i < $#hunks and
-                ( ( $compiled[ $#compiled ]->[ 0 ] == LITERAL and
+                $i < $#hunks and
+                ( $#compiled == -1 or
+                  ( $compiled[ $#compiled ]->[ 0 ] == LITERAL and
                     $compiled[ $#compiled ]->[ 2 ] =~ /\n\ *$/ ) or
                   ( $compiled[ $#compiled ]->[ 0 ] == CONTEXT_PUSH ) ) and
                 $hunks[ $i + 1 ] =~ /^\n\ */ )
@@ -1481,18 +1571,15 @@ my ( $dumpme );
                 $trim_next = 0;
             }
 
-            if( $syntax->{ compile_method } )
+            if( $syntax->{ compile } )
             {
                 my ( $compiler, $opcode );
 
                 $args = $self->_parse_args( $args, $token );
 
-                $compiler = $syntax->{ compile_method };
-                $opcode   = $syntax->{ opcode };
-                {
-                    no strict 'refs';
-                    $args = $self->$compiler( $token, $pos, $args );
-                }
+                $compiler = $syntax->{ compile };
+                $opcode   = $syntax->{ instr };
+                $args = $compiler->( $self, $token, $pos, $args );
                 push @compiled, [ $opcode, $pos, $args ] if defined $args;
             }
             elsif( $token eq 'debug' )
@@ -1588,6 +1675,7 @@ my ( $dumpme );
                     }
                     else
                     {
+                        #  "cannot happen".
                         $self->error(
                             "nesting stack appears to be corrupted" );
                     }
@@ -1647,7 +1735,7 @@ my ( $dumpme );
                 #  Extract the filename.
                 #  If the filename is empty-string then we ignore the
                 #  include statement, allowing us to do things like
-                #  <: include ${DEFINE} :> without knowing if the define
+                #  <: include ${DEFINE:} :> without knowing if the define
                 #  exists or not.
                 if( $filename = $args->{ filename } )
                 {
@@ -1714,14 +1802,12 @@ my ( $dumpme );
                 #  an <: include :>
                 my ( $last );
 
-                if( $#pos_stack == 0 )
-                {
-                    $self->error(
-                        "endinclude found while not within an include" );
-                }
+                #  "cannot happen".
+                $self->error( "endinclude found while not within an include" )
+                    if $#pos_stack == 0;
 
                 $last = shift @pos_stack;
-                delete $includes{ $last->[ 0 ] };
+                delete $includes{ $files[ $last->[ 0 ] ] };
                 shift @define_stack;
                 push @compiled,
                     [ CONTEXT_POP, $pos ];
@@ -1733,15 +1819,14 @@ my ( $dumpme );
             }
             else
             {
-                $self->error(
-                    "unrecognised token ($token)" );
+                #  Shouldn't be possible to get through the regexp to this.
+                $self->error( "unrecognised token ($token)" );
             }
         }
         else
         {
             #  We're a literal unless we're a malformed token
-            $self->error(
-                "unrecognised token ($hunk)" ) if $hunk =~ /^<:/;
+            $self->error( "unrecognised token ($hunk)" ) if $hunk =~ /^<:/;
             if( length( $hunk ) )
             {
                 push @compiled, [ LITERAL, $pos, $hunk ];
@@ -1767,30 +1852,25 @@ my ( $dumpme );
         unshift @pos_stack, $queue_pos if $queue_pos;
     }
 
-    if( $#nest_stack != -1 )
-    {
-        $self->error(
-            "unterminated if or for block" );
-    }
+    $self->error( "unterminated if or for block" )
+        if $#nest_stack != -1;
 
-    if( $#pos_stack != 0 )
-    {
-        $self->error(
-            "include stack not empty, corrupted?" );
-    }
+    #  "cannot happen".
+    $self->error( "include stack not empty, corrupted?" )
+        if $#pos_stack != 0;
 
     #  TODO: scan for undef jump addresses.
 
     foreach my $addr ( keys( %trim ) )
     {
-        $self->error(
-            "trim on non-literal, trim-stack corrupted?" )
+        #  "cannot happen".
+        $self->error( "trim on non-literal, trim-stack corrupted?" )
             unless $compiled[ $addr ]->[ 0 ] == LITERAL;
         $compiled[ $addr ]->[ 2 ] =~ s/^\n//;
     }
 
     #  We're done.
-    $self->{ template } = $self->optimize_template(
+    $self->{ template } = $self->_optimize_template(
         {
             program => [ @compiled ],
             files   => [ @files ],
@@ -1804,15 +1884,15 @@ my ( $dumpme );
 #use CGI;
 #print CGI->header('text/plain');
 
-if( $dumpme )
-{
-print "\n----\n" . $self->_dumpable_template() . "----\n";
-exit(0);
-}
+#if( $dumpme )
+#{
+#print "\n----\n" . $self->dumpable_template() . "----\n";
+#exit(0);
+#}
 }
 
 #  Warning, pass-by-ref: modifies $template.
-sub optimize_template
+sub _optimize_template
 {
     my ( $self, $template ) = @_;
     my ( $program, @nest_stack, %deletes, @function_table, %function_index );
@@ -1876,7 +1956,7 @@ sub optimize_template
             $deletes{ $i } = 1;
         }
     }
-    $self->delete_instr( $program, keys( %deletes ) );
+    $self->_delete_instr( $program, keys( %deletes ) );
 
 
     #  Trim empty context pushes (TODO: that have no assigns in top level)
@@ -1899,7 +1979,7 @@ sub optimize_template
             next;
         }
     }
-    $self->delete_instr( $program, keys( %deletes ) );
+    $self->_delete_instr( $program, keys( %deletes ) );
 
     #  Now scan for adjacent literals to merge where the second
     #  isn't a jump target.
@@ -1931,82 +2011,81 @@ sub optimize_template
         $deletes{ $i } = 1;
     }
 #warn "Literal merges: " . scalar( keys( %deletes ) );
-    $self->delete_instr( $program, keys( %deletes ) );
+    $self->_delete_instr( $program, keys( %deletes ) );
 
+    #  TODO: look for loops that make no use of special loop vars.
 
-if( 0 )
-{
-    #  TODO: walk program looking for functions, adding to function table.
-    @function_table = ();
-    %function_index = ();
-    foreach my $line ( @{$program} )
-    {
-        my ( $op, @op_queue );
-        @op_queue = ();
-
-        if( $line->[ 0 ] == EXPR )
-        {
-            push @op_queue, $line->[ 2 ];
-        }
-        elsif( $line->[ 0 ] == JUMP_IF )
-        {
-            push @op_queue, $line->[ 3 ];
-        }
-        elsif( $line->[ 0 ] == URL )
-        {
-            push @op_queue, %{$line->[ 2 ]};
-        }
-        elsif( $line->[ 0 ] == FOR )
-        {
-            push @op_queue, $line->[ 4 ];
-        }
-        elsif( $line->[ 0 ] == CONTEXT_PUSH )
-        {
-            push @op_queue, values( %{$line->[ 2 ]} );
-        }
-        while( defined( $op = shift( @op_queue ) ) )
-        {
-            next if not ref( $op ) or $op->[ 0 ] == VAR or
-                    $op->[ 0 ] == LITERAL or $op->[ 0 ] == TEMPLATE;
-            if( $op->[ 0 ] == OP_TREE )
-            {
-                push @op_queue, $op->[ 3 ], $op->[ 4 ];
-                next;
-            }
-            if( $op->[ 0 ] == UNARY_OP )
-            {
-                push @op_queue, $op->[ 3 ];
-                next;
-            }
-            if( $op->[ 0 ] == METHOD )
-            {
-                push @op_queue, @{$op->[ 4 ]};
-                next;
-            }
-            $self->error( "Unknown EXPR opcode: " . $op->[ 0 ] .
-                " in function table construction." )
-                unless $op->[ 0 ] == FUNC;
-
-#warn "Looking at op " . tinydump( $op );
-#warn "  Is function $op->[ 2 ]().";
-            if( not $function_index{ $op->[ 2 ] } )
-            {
-                push @function_table, $op->[ 2 ];
-                $function_index{ $op->[ 2 ] } = $#function_table;
-            }
-            $op->[ 2 ] = $function_index{ $op->[ 2 ] };
-#warn "  Replaced with $op->[ 2 ].";
-            push @op_queue, @{$op->[ 3 ]};
-        }
-    }
-    $template->{ function_table } = [ @function_table ];
-}
+#    #  walk program looking for functions, adding to function table.
+#    #  NOTE: turned out to not make a difference in run-time, but may revisit.
+#    @function_table = ();
+#    %function_index = ();
+#    foreach my $line ( @{$program} )
+#    {
+#        my ( $op, @op_queue );
+#        @op_queue = ();
+#
+#        if( $line->[ 0 ] == EXPR )
+#        {
+#            push @op_queue, $line->[ 2 ];
+#        }
+#        elsif( $line->[ 0 ] == JUMP_IF )
+#        {
+#            push @op_queue, $line->[ 3 ];
+#        }
+#        elsif( $line->[ 0 ] == URL )
+#        {
+#            push @op_queue, %{$line->[ 2 ]};
+#        }
+#        elsif( $line->[ 0 ] == FOR )
+#        {
+#            push @op_queue, $line->[ 4 ];
+#        }
+#        elsif( $line->[ 0 ] == CONTEXT_PUSH )
+#        {
+#            push @op_queue, values( %{$line->[ 2 ]} );
+#        }
+#        while( defined( $op = shift( @op_queue ) ) )
+#        {
+#            next if not ref( $op ) or $op->[ 0 ] == VAR or
+#                    $op->[ 0 ] == LITERAL or $op->[ 0 ] == TEMPLATE;
+#            if( $op->[ 0 ] == OP_TREE )
+#            {
+#                push @op_queue, $op->[ 3 ], $op->[ 4 ];
+#                next;
+#            }
+#            if( $op->[ 0 ] == UNARY_OP )
+#            {
+#                push @op_queue, $op->[ 3 ];
+#                next;
+#            }
+#            if( $op->[ 0 ] == METHOD )
+#            {
+#                push @op_queue, @{$op->[ 4 ]};
+#                next;
+#            }
+#            $self->error( "Unknown EXPR opcode: " . $op->[ 0 ] .
+#                " in function table construction." )
+#                unless $op->[ 0 ] == FUNC;
+#
+##warn "Looking at op " . _tinydump( $op );
+##warn "  Is function $op->[ 2 ]().";
+#            if( not $function_index{ $op->[ 2 ] } )
+#            {
+#                push @function_table, $op->[ 2 ];
+#                $function_index{ $op->[ 2 ] } = $#function_table;
+#            }
+#            $op->[ 2 ] = $function_index{ $op->[ 2 ] };
+##warn "  Replaced with $op->[ 2 ].";
+#            push @op_queue, @{$op->[ 3 ]};
+#        }
+#    }
+#    $template->{ function_table } = [ @function_table ];
 
     return( $template );
 }
 
 #  Warning, pass-by-ref: modifies $program.
-sub delete_instr
+sub _delete_instr
 {
     my ( $self, $program, @addrs ) = @_;
     my ( $renumber );
@@ -2108,18 +2187,22 @@ sub _compile_expression
     #  A function
     if( $expression =~ $capture_function_regexp )
     {
-        my ( $func, $args, $numargs );
+        my ( $func, $args, $numargs, $func_def );
 
         $func = $1;
         $args = length( $2 ) > 2 ? substr( $2, 1, -2 ) : '';
 
+        $func_def = $functions{ $func } if $functions{ $func };
+        $func_def = $self->{ local_functions }->{ $func }
+            if $self->{ local_functions } and
+               $self->{ local_functions }->{ $func };
+
+        $self->error( "Unknown function: $func" ) unless $func_def;
+
         $args = $self->_compile_func_args( $args );
 
-        $self->error( "Unknown function: $func" )
-            unless exists $functions{ $func };
-
         #  Check the number of args.
-        if( ( $numargs = $functions{ $func }->[ FUNC_ARG_NUM ] ) >= 0 )
+        if( ( $numargs = $func_def->[ FUNC_ARG_NUM ] ) >= 0 )
         {
             $self->error( "too few args to $func(), expected $numargs " .
                 "and got " . ( $#{$args} + 1 ) . " in $expression" )
@@ -2129,7 +2212,7 @@ sub _compile_expression
                 if $#{$args} + 1 > $numargs;
         }
 
-        unless( $functions{ $func }->[ FUNC_INCONST ] )
+        unless( $func_def->[ FUNC_INCONST ] )
         {
             my ( $nonliteral );
 
@@ -2141,13 +2224,19 @@ sub _compile_expression
             }
 
 #CORE::warn( "$expression has " . ( $nonliteral ? "nonliteral" : "literal" ) . " args" );
-            return( [ LITERAL, $expression,
-                $self->_eval_function( $func, $args ), 1 ] )
-                unless $nonliteral;
+            unless( $nonliteral )
+            {
+                my ( $ret );
+
+                $ret = $self->_eval_function( $func, $args );
+
+                return( [ LITERAL, $expression,
+                    ( ( ref( $ret ) eq 'SCALAR' ) ? ${$ret} : $ret ), 1 ] );
+            }
         }
 
         unshift @{$args}, [ TEMPLATE ]
-            if $functions{ $func }->[ FUNC_NEEDS_TEMPLATE ];
+            if $func_def->[ FUNC_NEEDS_TEMPLATE ];
 
         return( [ FUNC, $expression, $func, $args ] );
     }
@@ -2167,6 +2256,7 @@ sub _compile_expression
         return( [ METHOD, $expression, $var, $method, $args ] );
     }
 
+    #  "cannot happen".
     $self->error( "Unrecognised atomic expression element: $expression" );
 }
 
@@ -2275,6 +2365,7 @@ sub _compile_var
 
         $segment =~ $capture_variable_segment_regexp;
         push @segments, $1;
+        push @originals, $1;
         if( $2 )
         {
             #  var[ ... ] expression subscript notation.
@@ -2294,6 +2385,8 @@ sub _compile_var
                 push @segments, $index;
             }
             push @originals, $subscript;
+            $originals[ $#originals ] =~ s/^\s+//;
+            $originals[ $#originals ] =~ s/\s+$//;
         }
     }
 
@@ -2380,7 +2473,7 @@ sub _eval_expression
     }
     elsif( $type == UNARY_OP )
     {
-        #  TODO: unroll?
+        #  TODO: unroll?  common enough to bother?
         $val = $self->_eval_unary_op( $expr->[ 2 ], $expr->[ 3 ] );
     }
     elsif( $type == FUNC )
@@ -2388,9 +2481,15 @@ sub _eval_expression
 #        $val = $self->_eval_function( $expr->[ 2 ], $expr->[ 3 ] );
         #  WARNING: this is unrolled below from _eval_function: keep in sync.
 
-#warn "Eval func $expr->[ 2 ] against " . tinydump( [ @function_table ] );
+#warn "Eval func $expr->[ 2 ] against " . _tinydump( [ @function_table ] );
 #        $val = $function_table[ $expr->[ 2 ] ];
-        $val = $functions{ $expr->[ 2 ] };
+
+        #  TODO: should copy_global_functions block class-function lookup?
+        $val = $functions{ $expr->[ 2 ] } if $functions{ $expr->[ 2 ] };
+        $val = $self->{ local_functions }->{ $expr->[ 2 ] }
+            if $self->{ local_functions } and
+               $self->{ local_functions }->{ $expr->[ 2 ] };
+        $self->error( "Unknown function: $expr->[ 2 ]" ) unless $val;
         if( $val->[ FUNC_UNDEF_OK ] )
         {
             $val = $val->[ FUNC_FUNC ]->(
@@ -2451,10 +2550,13 @@ sub _eval_unary_op
 {
     my ( $self, $op, $expr ) = @_;
 
-    return( !$self->_eval_expression( $expr, 1 ) )
+    #  "|| 0" is there because !1 in perl is '' but we want 0.
+    #  !'' gives 1, so seems reasonable !'whatever' should be 0 too not ''.
+    return( !$self->_eval_expression( $expr, 1 ) || 0 )
         if $op eq '!';
-    return( not $self->_eval_expression( $expr, 1 ) )
+    return( ( not $self->_eval_expression( $expr, 1 ) ) || 0 )
         if $op eq 'not';
+    #  TODO: This is odd for strings, probably should error or warn.
     return( -$self->_eval_expression( $expr ) )
         if $op eq '-';
 
@@ -2569,6 +2671,9 @@ sub _eval_var
 
         if( not $type )
         {
+#use Data::Dumper;
+#warn "originals = " . Data::Dumper::Dumper( $originals ) . "\ni = $i\nleaf = $leaf\noriginal = $original\nsegments = " . Data::Dumper::Dumper( $segments ) . "\n";
+
             $self->error(
                 "Can't get key '$leaf' " .
                 ( $originals->[ $i ] ne $leaf ?
@@ -2597,13 +2702,18 @@ sub _eval_var
 sub _eval_function
 {
     my ( $self, $func, $args ) = @_;
+    my ( $val );
 
     #  WARNING: this function is unrolled above in _eval_expr: keep in sync.
 
-    $func = $functions{ $func };
+    #  TODO: should copy_global_functions block class-function lookup?
+    $val = $functions{ $func } if $functions{ $func };
+    $val = $self->{ local_functions }->{ $func }
+        if $self->{ local_functions } and
+           $self->{ local_functions }->{ $func };
+    $self->error( "Unknown function: $func" ) unless $val;
 
-    #  TODO: should be flag on function definition.
-    if( $func->[ FUNC_UNDEF_OK ] )
+    if( $val->[ FUNC_UNDEF_OK ] )
     {
         $args = [ map { $self->_eval_expression( $_, 1 ) } @{$args} ];
     }
@@ -2619,13 +2729,13 @@ sub _eval_function
 #$self->{ funcprofile }->{ $func } += Time::HiRes::time() - $start_time;
 #    return( $ret );
 
-    if( $func->[ FUNC_NEEDS_TEMPLATE ] )
+    if( $val->[ FUNC_NEEDS_TEMPLATE ] )
     {
-        return( $func->[ FUNC_FUNC ]->( $self, @{$args} ) );
+        return( $val->[ FUNC_FUNC ]->( $self, @{$args} ) );
     }
     else
     {
-        return( $func->[ FUNC_FUNC ]->( @{$args} ) );
+        return( $val->[ FUNC_FUNC ]->( @{$args} ) );
     }
 }
 
@@ -2770,6 +2880,7 @@ sub run
                 my ( $value, $context );
 
                 $value = $set_value->[ 0 ];
+                #  TODO: optimization to only set special vars if used
                 $special_values->{ $iterator } =
                     {
                         __counter__ => 0,
@@ -2816,6 +2927,7 @@ sub run
                 my ( $value );
 
                 $value = $set_value->[ $counter ];
+                #  TODO: optimization to only set special vars if used
                 $special_values->{ $iterator } =
                     {
                         __counter__ => $counter,
@@ -2857,6 +2969,7 @@ sub run
         {
             my ( $context, $new_context );
 
+            #  TODO: needed ||?  empty contexts should be optimized away now.
             $new_context = $line->[ 2 ] || {};
             $context = { %{$var_stack[ 0 ]} };
             foreach my $var ( keys( %{$new_context} ) )
@@ -2878,11 +2991,8 @@ sub run
             my ( $executor, $token, $value );
 
             $token    = $self->{ local_syntaxes }->{ '.instr' }->{ $instr };
-            $executor = $self->{ local_syntaxes }->{ $token }->{ run_method };
-            {
-                no strict 'refs';
-                $value = $self->$executor( $token, $line->[ 2 ] );
-            }
+            $executor = $self->{ local_syntaxes }->{ $token }->{ run };
+            $value    = $executor->( $self, $token, $line->[ 2 ] );
             $ret .= $value if defined $value;
         }
 #  TODO:  ick, hate cut-n-paste code.
@@ -2892,11 +3002,8 @@ sub run
             my ( $executor, $token, $value );
 
             $token    = $syntaxes{ '.instr' }->{ $instr };
-            $executor = $syntaxes{ $token }->{ run_method };
-            {
-                no strict 'refs';
-                $value = $self->$executor( $token, $line->[ 2 ] );
-            }
+            $executor = $syntaxes{ $token }->{ run };
+            $value    = $executor->( $self, $token, $line->[ 2 ] );
             $ret .= $value if defined $value;
         }
         elsif( $instr == DEBUG )
@@ -2943,8 +3050,8 @@ sub run
 #delete $self->{ "${prof}count" };
 #delete $self->{ "${prof}profile" };
 #}
-##my $tmp = $self->_dumpable_template();
-###my $tmp = $self->_decompile_template();
+##my $tmp = $self->dumpable_template();
+###my $tmp = $self->decompile_template();
 ##$tmp =~ s/-->/-- >/g;
 ##$ret .= "<!-- $self->{ filename } dump:\n$tmp-->\n";
 #}
@@ -2952,41 +3059,53 @@ sub run
     return( \$ret );
 }
 
-sub tersedump
+sub _tersedump
 {
     return( Data::Dumper->new( [ @_ ] )->Terse(1)->Useqq(1)->Dump() );
 }
 
-sub tinydump
+sub _tinydump
 {
     return( Data::Dumper->new( [ @_ ] )->Indent(0)->Quotekeys(0)->Pair('=>')->Terse(1)->Useqq(1)->Dump() );
 }
 
-sub _dumpable_template
+sub dumpable_template
 {
     my ( $self ) = @_;
-    my ( $lineno, $ret );
+    my ( $lineno, $ret, %instr_names );
 
     $ret = '';
     $lineno = 0;
+    %instr_names = (
+        (LITERAL)      => 'literal',
+        (EXPR)         => 'expr',
+        (JUMP)         => 'jump',
+        (JUMP_IF)      => 'jump_if',
+        (FOR)          => 'for',
+        (END_FOR)      => 'end_for',
+        (CONTEXT_PUSH) => 'context_push',
+        (CONTEXT_POP)  => 'context_pop',
+        );
 
     foreach my $line ( @{$self->{ template }->{ program }} )
     {
-        my ( $instr );
+        my ( $instr, $file );
 
+        $file = $self->{ template }->{ files }->[ $line->[ 1 ][ 0 ] ];
+        $file = 'template-string' if $file =~ m{^string:///};
         $ret .= sprintf( "%04d: [%-20s %3d %3d][%-12s] ", $lineno++,
-            $line->[ 1 ][ 0 ], $line->[ 1 ][ 1 ], $line->[ 1 ][ 2 ],
-            $line->[ 0 ] );
+            $file, $line->[ 1 ][ 1 ], $line->[ 1 ][ 2 ],
+            $instr_names{ $line->[ 0 ] } || $line->[ 0 ] );
 
         $instr = $line->[ 0 ];
         if( $instr == LITERAL )
         {
 #            $ret .= "\"$line->[2]\"\n";
-            $ret .= tinydump( $line->[ 2 ] ) . "\n";
+            $ret .= _tinydump( $line->[ 2 ] ) . "\n";
         }
         elsif( $instr == EXPR )
         {
-            $ret .= tinydump( $line->[ 2 ] ) .
+            $ret .= _tinydump( $line->[ 2 ] ) .
                 ( $line->[ 3 ] ? " (void)" : "" ). "\n";
         }
         elsif( $instr == JUMP )
@@ -2997,21 +3116,21 @@ sub _dumpable_template
         {
             $ret .= $line->[ 2 ] .
                 ( $line->[ 4 ] ? ' unless ' : ' if ' ) .
-                tinydump( $line->[ 3 ] ) . "\n";
+                _tinydump( $line->[ 3 ] ) . "\n";
         }
         elsif( $instr == FOR )
         {
-            $ret .= "$line->[ 3 ] in " . tinydump( $line->[ 4 ] ) .
+            $ret .= "$line->[ 3 ] in " . _tinydump( $line->[ 4 ] ) .
                 " then $line->[ 2 ]\n";
         }
         elsif( $instr == END_FOR )
         {
-            $ret .= "$line->[ 3 ] in " . tinydump( $line->[ 4 ] ) .
+            $ret .= "$line->[ 3 ] in " . _tinydump( $line->[ 4 ] ) .
                 " repeat $line->[ 2 ]\n";
         }
         elsif( $instr == CONTEXT_PUSH )
         {
-            $ret .= "context push of " . tinydump( $line->[ 2 ] ) . "\n";
+            $ret .= "context push of " . _tinydump( $line->[ 2 ] ) . "\n";
         }
         elsif( $instr == CONTEXT_POP )
         {
@@ -3023,86 +3142,1524 @@ sub _dumpable_template
     return( $ret );
 }
 
-sub _dump_template
-{
-    my ( $self ) = @_;
-
-    print $self->_dumpable_template();
-}
-
-sub _decompile_template
-{
-    my ( $self ) = @_;
-    my ( $lineno, $ret );
-
-    $ret = '';
-    $lineno = 0;
-
-    foreach my $line ( @{$self->{ template }->{ program }} )
-    {
-        my ( $instr );
-
-        $instr = $line->[ 0 ];
-        if( $instr == LITERAL )
-        {
-            $ret .= ( $line->[ 2 ] =~ /^$/ ) ?
-                "<: empty literal :>" : $line->[ 2 ];
-            next;
-        }
-        $ret .= "<: $instr ";
-        if( $instr == EXPR )
-        {
-            my ( $dump );
-
-            $dump = Data::Dumper::Dumper( $line->[ 2 ] );
-            $dump =~ s/^\$VAR1 = //;
-            $dump =~ s/;\n$//;
-            $ret .= $line->[ 2 ]->[ 1 ] . " ($dump)";
-        }
-        elsif( $instr == JUMP )
-        {
-            $ret .= "$line->[2]";
-        }
-        elsif( $instr == JUMP_IF )
-        {
-            $ret .= $line->[ 2 ] .
-                ( $line->[ 4 ] ? ' unless ' : ' if ' ) .
-                "$line->[3]";
-        }
-        elsif( $instr == FOR )
-        {
-            $ret .= "$line->[ 3 ] in $line->[ 4 ] then $line->[ 2 ]";
-        }
-        elsif( $instr == END_FOR )
-        {
-            $ret .= "$line->[ 3 ] in $line->[ 4 ] repeat $line->[ 2 ]";
-        }
-        elsif( $instr == CONTEXT_PUSH )
-        {
-            my ( $dump );
-
-            $dump = defined( $line->[ 2 ] ) ? Data::Dumper::Dumper( $line->[ 2 ] ) : 'undef';
-            $dump =~ s/^\$VAR1 = //;
-            $dump =~ s/;\n$//;
-            $dump =~ s/\s+/ /g;
-            $ret .= "context push of $dump";
-        }
-        elsif( $instr == CONTEXT_POP )
-        {
-            $ret = substr( $ret, 0, -1 );
-        }
-#  TODO: support for local syntax
-        else
-        {
-            $ret .= "(unhandled by decompile)";
-        }
-        $ret .= " :>";
-    }
-
-    return( $ret );
-}
+#sub _decompile_template
+#{
+#    my ( $self ) = @_;
+#    my ( $lineno, $ret );
+#
+#    $ret = '';
+#    $lineno = 0;
+#
+#    foreach my $line ( @{$self->{ template }->{ program }} )
+#    {
+#        my ( $instr );
+#
+#        $instr = $line->[ 0 ];
+#        if( $instr == LITERAL )
+#        {
+#            $ret .= ( $line->[ 2 ] =~ /^$/ ) ?
+#                "<: empty literal :>" : $line->[ 2 ];
+#            next;
+#        }
+#        $ret .= "<: $instr ";
+#        if( $instr == EXPR )
+#        {
+#            my ( $dump );
+#
+#            $dump = Data::Dumper::Dumper( $line->[ 2 ] );
+#            $dump =~ s/^\$VAR1 = //;
+#            $dump =~ s/;\n$//;
+#            $ret .= $line->[ 2 ]->[ 1 ] . " ($dump)";
+#        }
+#        elsif( $instr == JUMP )
+#        {
+#            $ret .= "$line->[2]";
+#        }
+#        elsif( $instr == JUMP_IF )
+#        {
+#            $ret .= $line->[ 2 ] .
+#                ( $line->[ 4 ] ? ' unless ' : ' if ' ) .
+#                "$line->[3]";
+#        }
+#        elsif( $instr == FOR )
+#        {
+#            $ret .= "$line->[ 3 ] in $line->[ 4 ] then $line->[ 2 ]";
+#        }
+#        elsif( $instr == END_FOR )
+#        {
+#            $ret .= "$line->[ 3 ] in $line->[ 4 ] repeat $line->[ 2 ]";
+#        }
+#        elsif( $instr == CONTEXT_PUSH )
+#        {
+#            my ( $dump );
+#
+#            $dump = defined( $line->[ 2 ] ) ? Data::Dumper::Dumper( $line->[ 2 ] ) : 'undef';
+#            $dump =~ s/^\$VAR1 = //;
+#            $dump =~ s/;\n$//;
+#            $dump =~ s/\s+/ /g;
+#            $ret .= "context push of $dump";
+#        }
+#        elsif( $instr == CONTEXT_POP )
+#        {
+#            $ret = substr( $ret, 0, -1 );
+#        }
+##  TODO: support for local syntax
+#        else
+#        {
+#            $ret .= "(unhandled by decompile)";
+#        }
+#        $ret .= " :>";
+#    }
+#
+#    return( $ret );
+#}
 
 sub clear_total_time { $total_time = 0; }
 sub total_time { return( $total_time ); }
 
 1;
+
+__END__
+
+=pod
+
+=head1 NAME
+
+Template::Sandbox - templates safely sandboxed from your application.
+
+=head1 SYNOPSIS
+
+   use Template::Sandbox;
+
+   my $template = Template::Sandbox->new();
+   $template->set_template( '/path/to/my/templates/accounts.html' );
+   $template->add_var( customers    => $customers );
+   $template->add_var( transactions => $transactions );
+   $template->add_vars( {
+       session => $session_info,
+       user    => $user_info,
+       } );
+   print ${$template->run()};
+
+   my $template = Template::Sandbox->new(
+       template_root => '/path/to/my/templates',
+       template      => 'accounts.html',
+       cache         => $cache,
+       );
+   $template->add_vars( {
+       transactions => $transactions,
+       customers    => $customers,
+       session      => $session_info,
+       user         => $user_info,
+       } );
+   print ${$template->run()};
+
+   Within /path/to/my/templates/accounts.html:
+
+   <: if user :>
+   <p>Welcome back, <: expr user.name :>.</p>
+   <: endif :>
+   <p>Recent Transactions:</p>
+   <table>
+       <tr>
+        <th>Transaction ID</th>
+        <th>Customer</th>
+        <th>Date</th>
+        <th>Description</th>
+       </tr>
+   <: foreach transaction in transactions :>
+       <tr bgcolor="#<: if transaction.__odd__ :>ccffcc<: else :>ccccff<: endif :>">
+        <td><: expr transaction.id :></td>
+        <td><: expr customers[ transaction.customer ].name :></td>
+        <td><: expr transaction.date :></td>
+        <td><: expr transaction.description :></td>
+       </tr>
+   <: endfor :>
+   </table>
+
+=head1 DESCRIPTION
+
+L<Template::Sandbox> is Yet Another Templating module, designed primarily
+for use in a webserver environment but usable anywhere, providing a more
+secure "sandboxed" environment than most templating systems.
+
+The core design philosiphy for L<Template::Sandbox> is that the template
+logic should have no access outside the template beyond that which you
+choose to permit it, this is frequently known as sandboxing.
+
+Unlike many other template systems, available on CPAN or in other languages,
+L<Template::Sandbox> doesn't give the template access to the global variables
+of your application or to the core functions of the language.
+
+This means that your template authors only have access to the data and
+functionality that your application developers choose to grant them,
+this encourages both to work with "published" interfaces between the
+two systems - your template authors can't reach into the application's
+internal-only data, and so your application developers can change that
+internal data without worrying that the templates will stop working or
+expose confidential information.
+
+L<Template::Sandbox> also provides the usual gamut of behaviours and
+optional features: caching compiled templates, includes, flow control,
+embedded expressions, cascading template candidates, and useful
+debugging information in case of errors.
+
+Furthermore L<Template::Sandbox> is designed to be subclassable should
+you wish to customize or extend other of its features.
+
+=head1 IMPORTANT CONCEPTS AND TERMINOLOGY
+
+This section contains some important concepts and terminology that will
+help you get started and to understand the rest of this document.
+
+=head2 Template Workflow
+
+The workflow to use a template consists primarily of two stages,
+preparation and execution:
+
+=over
+
+=item Template Preparation
+
+The preparation stage consists of constructing a new template object,
+initializing it, setting template variables and loading and compiling
+the template.
+
+Most of these operations can be done in any order, except that you need
+to register all functions you are going to use B<before> you load and
+compile the template.
+
+Some examples of things you might do in the preparation stage:
+
+  $template = Template::Sandbox->new();
+
+  #  Fine to add vars before the template is set.
+  $template->add_var( session => $session );
+
+  $template->set_template( 'control_panel/personal_details.html' );
+
+  #  Fine to add vars after the template is set too.
+  $template->add_var( {
+    private_messages => $session->{ user }->get_private_messages(),
+    recommendations  => $session->{ user }->get_recommendations(),
+    } );
+
+=item Template Execution
+
+The execution stage on the other hand only happens once you're done
+preparing, anything you want to do change the output of the template
+needs to happen before this point.
+
+It's fairly easy to understand since execution consists of only
+one action:
+
+  $outputref = $template->run();
+
+It is currently assumed that after template execution you will have
+no further use for the template, so while some cleanup is done of the
+stateful information required by execution, running the same template
+instance multiple times is not currently supported. (Although it might work.)
+
+=back
+
+=head2 Template Variables
+
+Each template instance has its own namespace of I<template variables>,
+these are added via the C<< $template->add_var() >> and
+C<< $template->add_vars() >> methods, throughout this document any
+reference to I<variables> is assumed to mean I<template variables>
+unless otherwise noted.
+
+I<Template variables> are the only variables your template can see,
+you cannot access the contents of a perl variable unless you either
+directly pass it as a template variable, indirectly pass it as a
+reference within a structure that you have added as a template variable,
+or return it as a value from within a I<template function>.
+
+=head2 Template Functions
+
+Much like I<template variables>, each template instance has its
+own namespace of I<template functions>, there is also a common
+namespace across all templates that can contain I<template functions>.
+
+Also like I<template variables>, your template cannot access any perl
+function unless the function has been directly registered with
+either the instance or the entire L<Template::Sandbox> class, or
+is used within a function that has itself been registered.
+
+=head1 OPTIONS
+
+New L<Template::Sandbox> objects can be created with the constructor
+C<< Template::Sandbox->new( %options ) >>, using any (or none) of the
+options below.
+
+=head2 B<template> => I<template filename>
+
+Specifies the template file to be loaded.
+
+=head2 B<template_root> => I<directory>
+
+Sets the base directory to which template filenames will be relative.
+
+This is not enforced as a restriction, if someone wants to traverse
+outside the C<template_root> with C<..> or other mechanics, they can
+do so.
+
+=head2 B<logger> => I<logging object>
+
+Sets the object to be used for logging purposes, by default L<Log::Any>
+is invoked via C<< Log::Any->get_logger() >>, if you're passing some
+other form of logger, you're responsible for ensuring it meets the
+same API as provided by L<Log::Any>.
+
+=head2 B<cache> => I<cache object>
+
+Sets the template to search the given cache for compiled templates
+rather than compiling them anew.
+
+The cache may be any that conforms to the L<Cache::Cache> API.
+
+L<Template::Sandbox> however also detects the use of
+L<Cache::CacheFactory> in order to make use of its last-modified
+dependencies checking, if you're using other caching mechanics
+you will need to ensure cache freshness via your own mechanisms.
+
+See the section L</"Caching"> for further discussion.
+
+=head2 B<ignore_module_dependencies> => I<1> | I<0>
+
+When using L<Cache::CacheFactory> for caching, a list of dependencies
+for the cached version of the template is produced, this includes
+the template file itself and any included templates.  By default this
+list also includes the module files for the template class and its
+superclasses, since if they change the compiled template may be
+invalidated.
+
+Setting C<ignore_module_dependencies> to a true value will prevent
+this list of module files from being appended, potentially a performance
+gain, however you probably should ensure that the cache is flushed between
+any updates to the L<Template::Sandbox> module or any subclasses you
+have made, if they contain functional changes.
+
+See the section L</"Caching"> for further discussion.
+
+=head2 B<template_function> => I<template function definition>
+
+This lets you register a custom template function to the new template
+instance.
+
+See the section L</"Custom Template Functions"> for more details.
+
+=head2 B<copy_global_functions> => I<1> | I<0>
+
+On initializing the new template object, if this option is set to a true
+value, all template functions added at the class level will be copied as
+custom template functions local to that instance, this ensures that if
+the class function is later removed then the function will still be
+available to templates run by this instance.
+
+See the section L</"Custom Template Functions"> for more details.
+
+=head2 B<template_syntax> => I<template syntax definition>
+
+This lets you register a custom template syntax to the new template
+instance.
+
+See the section L</"Custom Template Syntaxes"> for more details.
+
+=head1 PUBLIC METHODS
+
+=over
+
+=item C<< $template->new( %options ); >>
+
+This is the constructor for L<Template::Sandbox>, it will return
+a newly constructed template object, or throw an exception explaining
+why it couldn't.
+
+The options you can pass in are covered in the L</"OPTIONS"> section
+above.
+
+=item C<< $template->register_template_function >>
+
+=item C<< $template->add_template_function  >>
+
+=item C<< $template->unregister_template_function >>
+
+=item C<< $template->delete_template_function  >>
+
+=item C<< $template->register_template_syntax >>
+
+=item C<< $template->add_template_syntax >>
+
+=item C<< $template->unregister_template_syntax  >>
+
+=item C<< $template->delete_template_syntax >>
+
+=item C<< $template->get_valid_singular_constructor_param >>
+
+=item C<< $template->get_valid_multiple_constructor_param >>
+
+=item C<< $template->initialize >>
+
+=item C<< $template->set_template_root >>
+
+=item C<< $template->get_template_candidates >>
+
+=item C<< $template->get_include_candidates >>
+
+=item C<< $template->get_additional_dependencies >>
+
+=item C<< $template->set_template >>
+
+=item C<< $template->set_template_string >>
+
+=item C<< $template->add_var >>
+
+=item C<< $template->add_vars >>
+
+=item C<< $template->merge_var >>
+
+=item C<< $template->merge_vars >>
+
+=item C<< $template->run >>
+
+=item C<< $template->clear_total_time >>
+
+=item C<< $template->total_time >>
+
+=item C<< $template->dumpable_template >>
+
+=back
+
+=head1 TEMPLATE SYNTAX
+
+With the exception of compile defines (detailed below in
+L</"Compile Defines">), all L<Template::Sandbox> syntax is written
+as statements enclosed within
+C<< <: >> and C<< :> >> symbols, for example:
+
+  <: if a :>some content<: else :>some other content<: endif :>
+  <: for x in y :>some loop content<: endfor :>
+
+Everything outside the C<< <: :> >> delimiters is considered to be
+template content and will be reproduced unaltered in the template's
+output.
+
+A short summary of what statements are available and their arguments
+follows, with a more detailed section on each further below.
+
+=over
+
+=item B<< <: expr >> I<< expression >> B<< :> >>
+
+Substitutes the statement with value of I<< expression >> when the template
+is run.  The expression itself may be a literal value, a variable or the
+result of function calls or operators.
+
+For further details please see L</"EXPRESSIONS">.
+
+=item B<< <: if >> I<< condition >> B<< :> >> I<< branch content >> B<< <: endif :> >>
+
+The C<if> statement conditionally chooses from several different branches of
+content and only one of those branches will be in the final template
+output.  Collectively the C<if>, C<else>, C<else if>, C<end if>, and variant
+statements are refered to as L</"CONDITIONAL STATEMENTS">.
+
+=item B<< <: for >> I<< iterator >> B<< in >> I<< group >> B<< :> >> I<< loop content >> B<< <: endfor :> >>
+
+The C<for> or C<foreach> statement cycles an I<< iterator >> variable through
+each element in the I<< group array >> or hash and substitutes the
+I<< loop content >> into the template output each time.
+
+See L</"LOOPS> for further details.
+
+=item B<< <: include >> I<< filename >> B<< :> >>
+
+Includes the contents of the given I<< filename >> at the current location
+within the template, the included file will itself be treated as a template
+and any template statements within it will also be run.
+
+This is further detailed in the  L</"INCLUDES"> section.
+
+=item B<< <: # >> I<< comment >> B<< :> >>
+
+The C<#> statement is removed entirely from the tempplate output (it's
+entirely removed from the compiled template in fact), behaving like a
+normal perl comment.
+
+This allows you to easily and quickly comment out statements while
+developing the template:
+
+  <: # if session.user :>
+  This is where we'd display their control panel link once we've
+  written the session.user object.
+  <: # endif :>
+
+Note that only the C<if> and C<endif> statements are commented out,
+the template content between them will still be in the template.
+
+=back
+
+=head1 EXPRESSIONS
+
+Template expressions are much like those in any language, they can be
+formed by combinations of literal values, variables, operators and
+in some circumstances method calls.
+
+=head2 Literal Values
+
+Literal values can be either numbers or they can be string
+values enclosed in single-quotes, for example:
+
+  <: expr 'a literal string' :>
+  <: expr 42 :>
+
+Strings have no interpolation done except backslash escaping: backslash
+followed by another character represents that character devoid of any
+special meaning, so if you wish to have a string containing a literal
+single-quote or backslash you could do the following:
+
+  <: expr 'a string with a single-quote (\') within it' :>
+  <: expr 'a string with a backslash (\\) within it' :>
+
+Note that one consequence of the "no interpolation" rule is that you
+will B<not> be able to embed a C<\n> in your string and receive a
+newline/carriage-return, you'll just get a literal C<n> instead,
+this may change in a future release, but for now you can make use
+of the C<cr> special variable as detailed in L</"SPECIAL VARIABLES">.
+
+=head2 Variables
+
+Template variables refered to by bare names using a syntax designed to
+be familiar to javascript developers rather than perl developers.
+As such, it uses a 'dotted index' notation interchangably with
+square-bracket indices.
+
+For example, C<user> would refer to the template variable known as I<user>,
+and both C<user.name> and C<< user[ 'name' ] >> would refer to the
+I<name> index of the I<user> template variable.
+
+When using the square-bracket notation, the contents of the brackets are
+evaluated as an expression and the result is used as the index value, so
+the following is valid (if nasty to read):
+
+  customers[ transactions[ transaction.id ].customerid ]
+
+As you can see from the example, you can also mix and match the notations,
+the following expressions are all identical:
+
+  customer.address.street
+  customer[ 'address' ].street
+  customer.address[ 'street' ]
+  customer[ 'address' ][ 'street' ]
+
+Which you use is largely a matter of choice although the usual convention
+for clarity is to use the dotted notation for 'constant indices' (ones that
+don't change) and the square-bracket notation for ones that may vary.
+
+When indexing arrays it's customary to use square-brackets too:
+
+  results[ 12 ]
+
+Variables usually refer to template variables added via
+C<< $template->add_var() >> or C<< $template->add_vars() >>, however
+in some circumstances they can refer to locally-scoped variables set
+with the assign operator or include variables, both detailed in the
+L</"Operators"> and L</"INCLUDES> sections and further under
+L</"SCOPED VARIABLES">.
+
+There are a number of "special variables" that exist as indexes of
+other variables, you can recognise these as they are surrounded by
+double-underscores, some examples:
+
+  customers.__size__
+  transaction.__odd__
+
+These variables are described in the L</"SPECIAL VARIABLES"> section.
+
+=head2 Operators
+
+Operators exist to combine various subexpressions into a larger
+expression, L<Template::Sandbox> supports most standard operators,
+listed below in order of precedence (with the exception of comparision
+operators, see their notes if precedence is important.)
+
+=over
+
+=item Arithmetic operators (*, /, %, -, +)
+
+These perform their standard arithmetic functions on numeric values.
+Note that C<< + >> behaves like Perl's C<< + >> operator, not that
+of Javascript: it expects a numeric value, if you want to concatinate
+strings you should use the C<< . >> string concatination operator below.
+
+=item String concatination (.)
+
+Concatinates two strings into a single string.
+
+=item Logic operators (!, not, &&, ||, and, or)
+
+Perform logical negation, ANDing and ORing.
+
+Note that the C<< && >>, C<< || >>, C<< and >>, C<< or >>
+operators all perform left-wise "short circuit" behaviour: that is, if
+the left-hand expression is sufficient to determine the result of the
+operator as a whole, the right-hand expression will never be evaluated.
+
+=item String comparison operators (lt, gt, le, ge, eq, ne, cmp)
+
+These operators compare two strings as in the equivilent Perl operators.
+
+=item Numeric comparison operators (<, >, <=, >=, ==, !=, <=>)
+
+These operators compare two numbers as in the equivilent Perl operators,
+note that if you supply strings to them, like you would to the equivilent
+operators in Javascript, then you will cause warnings.
+
+=item Assignment operator (=)
+
+This creates a new variable local to the current scope and assigns the
+right-hand side value to it. If there is already a variable local to
+the current scope, it will assign to that instead.
+
+See L</"SCOPED VARIABLES"> for more details on this behaviour.
+
+Note that you can only assign to a 'top-level' variable, ie you can assign
+to C<day_name> but not C<date.day_name>. This is intentional to reduce
+complexity and performance on variable evaluation, and because if you
+really need it, you're probably trying to do something that should be
+in your application layer, and not trying to write the application within
+the template.
+
+Variable assignment returns the value assigned as its value, ie, the
+following template produces C<< "blue" >> when run:
+
+  <: if ( a = 4 + 1 ) == 5 :>
+  blue
+  <: else :>
+  red
+  <: endif :>
+
+However, if the assign is at the top level of an C<< expr >> statement,
+it will return the empty string '', so that it leaves your template output
+unmarked, ie:
+
+  x<: expr a = 5 :>x
+
+produces:
+
+  xx
+
+and not:
+
+  x5x
+
+Generally this will mean it will just "Do What I Want".
+
+=back
+
+=head2 Functions
+
+Function calls may be made within an expression using the, familiar to
+many languages, syntax of C<< functionname( arg1, arg2, ... ) >>. For
+convenience and familiarity to Perl developers you can also use C<< => >>
+as an argument separator, ie the following two are equivilent, but the
+second may be more readable:
+
+  <: expr url( 'q', 'bald-headed eagle', 'lang', 'en' ) :>
+  <: expr url( 'q' => 'bald-headed eagle', 'lang' => 'en' ) :>
+
+Note however that unlike Perl, C<< => >> does not auto-quote barewords
+on its left-hand side:
+
+  <: # Probably not going to do what you want :>
+  <: expr url( q => 'bald-headed eagle', lang => 'en' ) :>
+
+This will pass the contents of template variable C<q> as the first argument
+and the contents of C<lang> as the third.
+
+Note also that these function calls are not directly calls to perl functions,
+instead they are calls to functions that have been registered as "template
+functions" with the current template.
+
+By default only three functions are registered, those three are needed
+for internal behaviour of certain special variables and for the test
+suite, it is part of L<Template::Sandbox>>'s core philosophy that, like
+template variables, you must explicitly grant access to more than this
+if you wish to do so.
+
+Ideally L<Template::Sandbox> would ship with no functions enabled, and
+so these functions may be moved to the optional functions module in a
+future release if possible.
+
+The three default functions are:
+
+=over
+
+=item C<void()>
+
+Takes any args and returns the empty string.
+
+This function is retained for legacy reasons as it was previously used
+internally to provide the void-context for variable assigns at the top
+level of an C<< expr >> statement.
+
+B<This function may be removed in a future release.>
+
+=item C<size( arg )>
+
+Takes a single argument and returns the "size" of it.  For hashes that's
+the number of keys, for arrays it's the number of elements and for strings
+it's the length of the string. 
+
+Note that supplying a numeric argument will result in the number being
+converted to and treated as a string, and so will most likely result in
+returning the number of digits in the number.  This behaviour is undefined
+and subject to change.
+
+This function is required for global use since it is used internally to
+implement the __size__ special variable.  (See L</"SPECIAL VARIABLES">.)
+
+=item C<defined( arg )>
+
+Takes a single argument and returns 1 or 0 to indicate whether the
+pvalue was defined or not.
+
+This function is required by the test suite at a stage before the function
+registration has been confirmed as working, as such will remain for at
+least the initial few releases to simplify CPAN smoke-testing feedback.
+
+=back
+
+=head2 Methods
+
+Methods on objects can be used within an expression, using a syntax familar
+to either Javascript or Perl developers, for example:
+
+  message.mark_as_read( 1 )
+
+or:
+
+  message->mark_as_read( 1 )
+
+In either case the C<< mark_as_read >> method will be called on the object
+in the template variable C<< message >>, with an argument of C<< 1 >>.
+
+However, in keeping with the purpose of L<Template::Sandbox>>, you cannot
+just call methods on any old object, every method call is preceded by a
+call to C<< valid_template_method >> as a method on the target object,
+with the method to be called as an argument.
+
+In the example above this would be
+C<< message->valid_template_method( 'mark_as_read' ) >>.
+
+If this method returns true, then the C<< mark_as_read >> method call is
+permitted to go ahead, if it returns false then an error will be raised.
+
+Methods are mostly provided for completeness, there are performance
+implications in using them detailed in
+L</"PERFORMANCE CONSIDERATIONS AND METRICS">, however it may be that
+someone will find them invaluable. Maybe.
+
+=head2 Brackets
+
+If you're combining several expressions and are uncertain of the
+operator precedence, or simply want to make things clearer, you can
+use C<< () >> round-brackets in the traditional way to group expressions
+in order of execution.
+
+Some examples:
+
+  <: expr ( 1 + 2 ) * 5 :>
+  <: expr config.baseurl . '?page=' . ( param.page + 1 ) :>
+
+=head1 CONDITIONAL STATEMENTS
+
+L<Template::Sandbox> provides C<< if >>, C<< else if >>, C<< else >>,
+C<< end if >>, C<< unless >>, C<< else unless >> and C<< end unless >>
+constructs to conditionally choose between different sections of
+template content, much like if statements in other languages choose
+between blocks of statements.
+
+Any valid expression (see L</"EXPRESSIONS">) may be used as the condition,
+the true/false value of the result is all that the conditional statement
+cares about.
+
+Each condtional construct is made up of an opening C<if> or C<unless>
+statement, optionally one or more C<else if> or C<else unless> statements,
+optionally a single C<else> statement and is closed by a C<end if> or
+C<end unless>.
+
+All template content between each of these statements is considered to
+be the "branch content" for the immediately preceding condition, and only
+appears in the final template output if the statement is the first true
+statement of the entire construct.
+
+You can also nest as many C<if> constructs as you wish, provided each one
+is entirely contained within a single content block of its parent (ie, is
+properly nested and not "overlapping".)
+
+Simply put, it behaves like an C<if> construct in every other language.
+
+The following statements are available:
+
+=over
+
+=item B<< <: if >> I<< condition >> B<< :> >>
+
+=item B<< <: unless >> I<< condition >> B<< :> >>
+
+All conditional constructs must open with an C<if> or C<unless> statement.
+Like in Perl the C<unless> statement is just a convenience syntax for the
+logical negation of the condition.
+
+=item B<< <: else if >> I<< condition >> B<< :> >>
+
+=item B<< <: elseif >> I<< condition >> B<< :> >>
+
+=item B<< <: elsif >> I<< condition >> B<< :> >>
+
+=item B<< <: else unless >> I<< condition >> B<< :> >>
+
+=item B<< <: elseunless >> I<< condition >> B<< :> >>
+
+=item B<< <: elsunless >> I<< condition >> B<< :> >>
+
+Depending on preference, you can choose from several functionally-equivilent
+spellings of the C<else if> statement.
+
+You can have no C<else if> statements, or you can have as many as you like,
+the only restriction is that they must come before any C<else> statement
+for the construct.
+
+=item B<< <: else :> >>
+
+This optionally defines the block that will be used if no other condition
+within the statement is true, there can only be one of them in each C<if>
+construct, and it must be the last branch - since it's a "catch all", having
+anything after it wouldn't make sense...
+
+=item B<< <: end if :> >>
+
+=item B<< <: endif :> >>
+
+=item B<< <: end unless :> >>
+
+=item B<< <: endunless :> >>
+
+This marks the end of the conditional construct, whatever form of C<if> or
+C<unless> you have used to open your construct, you can use any of the above
+close it, for clarity you may wish to use a matching one though.
+
+=back
+
+=head1 LOOPS
+
+L<Template::Sandbox> provides a "loop" mechanism like the foreach statement
+of Perl, it creates and sets a locally scoped variable, sets it to the
+first value in a set of values and executes the contents of the loop,
+sets the loop variable to the next in the set of values and repeats,
+until there are no more entries in the set to loop through, whereupon
+the loop exits.
+
+Unlike Perl or Javascript there is currently no C<last> or
+C<continue> mechanism to exit from a loop or jump to the next
+iteration directly.
+
+Each C<for> loop takes the following format:
+
+  <: for iterator in set :>
+  loop content
+  <: end for :>
+
+The iterator is created as a scoped variable (see L</"SCOPED VARIABLES">)
+within a new scope context, so it will mask the existence of any
+previous variable with that name within the scope of the loop.
+
+Additionally the iterator has several special variable subscripts
+attached for convenience, such as C<< iterator.__first__ >>, these
+are detailed in the L</"SPECIAL VARIABLES> section.
+
+The set of values to iterate across may be a simple number, an array
+or a hash, or an expression resulting in one of these. The behavior
+in each case is detailed in its own section below.
+
+=head2 Array Loops
+
+If the set to iterate across is evaluated to be an array, then the
+iterator is set to each element of the array in order, from first to
+last.
+
+=head2 Hash Loops
+
+If the set to iterate across is evaluated to be a hash, then the
+iterator is set to each key of the array in alphabetical order, from
+first to last, with the special variable C<< iterator.__value__ >>
+set to the corressponding value of the hash in addition to the usual
+special loop variables.
+
+=head2 Numeric Loops
+
+If the set to iterate across is evaluated as a single number, such as:
+
+  <: for x in 10 :>
+  <: expr 10 - x :> green bottles standing on the wall.
+  <: end for :>
+
+it is taken to mean an array of values from C<0> to C<n> where C<n> is
+the number given. In the example above this would be C<0> to C<10>.
+
+If the value happens to be a floating point (or even a string), it will
+be turned into a number via perl's C<int()> function.
+
+In all other respects, a numeric loop will be have as if you had supplied
+an array of the numbers directly. (See L</"Array Loops">.)
+
+=head1 INCLUDES
+
+It's possible with the C<< include >> statement to include the contents
+of other templates at the current statment's position, this allows you
+to easily share common sections of a template between several templates
+rather than cut-n-paste it into each.
+
+Basic usage is fairly simple:
+
+  <: include transaction_row.html :>
+
+The included template file is looked for relative to the current template's
+directory, in subclasses of L<Template::Sandbox> you can override this
+with the C<get_include_candidates()> method.
+
+All includes are done at compile-time, this means that if there compile
+errors in an included file, the template as a whole will fail to compile
+even if the include is in a section of the template that will never be
+reached during run-time. It also means you B<cannot> include a filename
+based on a run-time parameter, ie the following is unlikely to be working
+as intended:
+
+  <: # Wrong!!! :>
+  <: include our_files[ chosen_file ] :>
+
+This will try to load a template with literal filename
+"our_files[ chosen_file ]" and not the presumed intention of a template
+whose filename is stored in the the C<our_files> array or hash with the
+index stored in the C<chosen_file> variable.
+
+=head2 Setting Compile Defines with C<include>
+
+It's possible to set L</"Compile Defines"> when including a file, to do
+so just set the values after the filename in the C<include> statement,
+as in one of these examples:
+
+  <: include transaction_row.html TDCLASS=green :>
+  <: include transaction_row.html TDCLASSODD=green TDCLASSEVEN=blue :>
+  <: include transaction_row.html TDCLASS="value with spaces" :>
+
+Any upper-case named parameter to C<include> will set the corressponding
+L</"Compile Define"> when compiling the included template, this define
+value will mask any existing define of that name for the duration of the
+compile of the included template. (And any templates it, in turn, includes.)
+
+=head2 Setting Scoped Variables with C<include>
+
+You can also set variables scoped locally to the included template from
+the C<include> statement, you do so in much the same manner as setting
+an include, except the parameter name is lower-case:
+
+  <: include login_widget.html user=session.user :>
+
+This would set the C<user> template variable to be equal to the value of
+the C<session.user> template variable when control enters into the included
+file at runtime. This variable would be local to the included file and
+any files it, in turn, includes. See L</"SCOPED VARIABLES"> for more
+details.
+
+=head1 SCOPED VARIABLES
+
+=head1 SPECIAL VARIABLES
+
+=over
+
+=item C<undef>
+
+=item C<null>
+
+Both C<undef> and C<null> provide access to the Perl C<undef> value,
+C<null> is provided as a familiar name for Javascript developers.
+
+=item C<cr>
+
+Because there's, currently, no interpolation within literal strings
+inside template expressions, this prevents you from using C<'\n'> to
+provide a newline/carriage-return. The C<cr> special variable exists
+to provide easy(ish) access to that value:
+
+  <: expr 'Hello' . cr . 'World!' :>
+
+This will produce template output:
+
+  Hello
+  World!
+
+Needing to resort to use of a variable to get this functionality could
+be considered a bug, or at the least a missing feature, so it may
+become unneccessarily in a future release. The use of C<cr> will still
+be supported beyond that point for backwards-compatibility.
+
+=item C<.__size__>
+
+Provides the size of the indexed variable, as provided by the C<size()>
+template function.
+
+For arrays this is the number of elements in the array, for hashes it
+is the number of keys in the hash, for strings it is the number of
+characters in the string.
+
+For numbers it has currrently undefined behaviour that is the number
+of characters in the string when the number is converted to string.
+This may be subject to change in future releases.
+
+=back
+
+The following special variables are only available on the iterator
+variable of a C<for> or C<foreach> loop.
+
+=over
+
+=item C<.__value__>
+
+Available only when iterating across a hash, this provides access
+to the value corressponding to the key the iterator is currently
+set to, this can be less typing (and faster to execute) if the
+hash being iterated over was the result of a long expression,
+for example the following two loops are equivilent, but the second
+is more convenient and also executes faster:
+
+  <: for x in this.is.the.bottom.of[ 'a' ][ 'long' ].chain :>
+  <: expr this.is.the.bottom.of[ 'a' ][ 'long' ].chain[ x ] :>
+  <: end for :>
+
+  <: for x in this.is.the.bottom.of[ 'a' ][ 'long' ].chain :>
+  <: expr x.__value__ :>
+  <: end for :>
+
+=item C<.__counter__>
+
+Gives the numeric count of which iteration of the loop is currently
+being run, numbered from zero:
+
+  <: for x in y :>
+  <: expr x.__counter__ :>
+  <: end for :>
+
+Will give output "0", "1", "2", "3", "4", etc.
+
+=item C<.__even__>
+
+=item C<.__odd__>
+
+Set to true or false if this an odd or even iteration of the loop.
+
+Commonly useful for easily doing alternating bands of background colour
+in tables for legibility:
+
+  <tr bgcolor="#<: if row.__odd__ :>ccffcc<: else :>ccccff<: endif :>">
+
+Note that since this is derived from C<__counter__>, which starts at zero,
+this means that the first iterator is C<__even__> and not C<__odd__>.
+
+=item C<.__first__>
+
+Set to true if this is the first iteration of the loop, or false
+subsequently.
+
+=item C<.__last__>
+
+Set to true if this is the last iteration of the loop, or false otherwise.
+
+=item C<.__inner__>
+
+Set to true if this is neither the first nor the last iteration of the
+loop, otherwise false.
+
+=item C<.__prev__>
+
+=item C<.__next__>
+
+Give you convenient access to the previous and next values that the iterator
+was (or will be) set to, or undef if you are at the start or end of the loop
+respectively.
+
+Note that in the case of iterating across a hash, the special variable
+C<.__value__> will B<not> be set for either of these special variables,
+so you cannot use C<iterator.__prev__.__value__> to get to the previous
+value in the hash.
+
+=back
+
+=head1 COMPILE DEFINES
+
+${NAME}
+
+=head2 Compile Define Defaults
+
+${NAME:default}
+
+=head2 Quoted Compile Defines
+
+${'NAME'} and ${'NAME:default'}
+
+=head1 CUSTOM TEMPLATE FUNCTIONS
+
+In order to use any functions beyond the basic ones within your template
+you will need to register them as a custom template function.
+
+This can be done either with the C<template_function> constructor option
+or the C<< $template->register_template_function() >> method.
+
+To these you need to supply a name for the function, as it will be invoked
+from within your templates, and a data-structure providing the function and
+describing some flags on the function's behaviour.
+
+To assist in producing the function definition you can import some helper
+functions using the C<':function_sugar'> import tag on your C<use> line:
+
+  use Template::Sandbox qw/:function_sugar/;
+
+These imported functions, described in L</"Function Sugar">, allow you
+to pass an anonymous subroutine (or function reference) and produce a
+data-structure suitable for registering as a template function.
+
+Some examples probably make this a lot clearer:
+
+  use Template::Sandbox qw/:function_sugar/;
+
+  #  Register 4 template functions during construction.
+  $template = Template::Sandbox->new(
+      template_function => [
+          int => ( one_arg  sub { int( $_[ 0 ] ) } ),
+          max => ( two_args sub { $_[ 0 ] > $_[ 1 ] ? $_[ 0 ] : $_[ 1 ] } ),
+          min => ( two_args sub { $_[ 0 ] < $_[ 1 ] ? $_[ 0 ] : $_[ 1 ] } ),
+          var => ( one_arg inconstant needs_template
+                       sub { $_[ 0 ]->_var_value( $_[ 1 ] ) } ),
+          ],
+      );
+
+  #  Register a template function after construction.
+  $template->register_template_function(
+      localtime => ( no_args inconstant sub { scalar localtime() } ),
+      );
+
+  #  Whoops, no we didn't want that function after all.
+  $template->unregister_template_function( 'localtime' );
+
+  #  Actually, we wanted it available to all templates.
+  Template::Sandbox->register_template_function(
+      localtime => ( no_args inconstant sub { scalar localtime() } ),
+      );
+
+Now within your templates you can do the following sorts of things:
+
+  <: if max( pricea, priceb ) > 50 :>
+  Price too high, max price (rounded down) is:
+  <: expr int( max( pricea, priceb ) ) :>.
+  <: else :>
+  Prices all within tolerences.
+  <: endif :>
+  Page generated on <: expr localtime() :>.
+
+=head2 Function Sugar
+
+=over
+
+=item inconstant
+
+Indicates that the function returns a value that is not constant even
+if the arguments are constant, and that the function should not be
+subject to constant-folding optimizations at compile time.
+
+Some examples of inconstant functions in Perl would be C<time()> or
+C<random()>.
+
+=item needs_template
+
+Indicates that the function would like the template instance passed as
+the first argument in addition to any arguments supplied within the
+template.
+
+=item undef_ok
+
+Indicates that the function finds it acceptable to be passed undefined
+arguments and disables the warnings that would otherwise be produced by
+them.
+
+=item no_args
+
+States that the function should be passed no arguments, attempting to
+do so will produce a compile-time error.
+
+=item one_arg
+
+=item two_args
+
+=item three_args
+
+States that the function should have the relevent number of arguments,
+passing a larger or smaller number produces a compile-time error.
+
+=item any_args
+
+States that the function does not care about how many arguments it
+receives, it will accept any number of them (or none).
+
+=item has_args
+
+Lets you define the number of arguments manually rather than using one
+of the convenience wrappers above, takes two args, the first being the
+function or chained function sugar, the second being the number of arguments
+the function expects, for example this gives you a function that takes
+5 arguments (although it doesn't use them):
+
+  has_args sub { 'has a lot of args but ignores them' }, 5;
+
+Using anything other than 5 arguments to this function would then be a
+compile-time error.
+
+=item def_func
+
+Not exported by default.
+
+This is the function used internally by the I<function sugar> functions
+listed above, it takes either an already-sugared function or a sub reference
+as the first argument, the second argument is the index of the function
+definition to alter, and the third is the value to set the entry to.
+
+You shouldn't ever need to use this, but it can be exported if you find
+a need for it with:
+
+  use Template::Sandbox qw/:function_sugar def_func/;
+
+=back
+
+=head1 CUSTOM TEMPLATE SYNTAXES
+
+This API is incomplete and subject to change, nevertheless the current
+state-of-play is documented here in case you need to make use of it.
+
+=head1 ZERO-WIDTH FOLDING
+
+=head1 CACHING
+
+=head1 SUBCLASSING Template::Sandbox
+
+=head2 Useful methods to override when subclassing
+
+=over
+
+=item initialize()
+
+=item get_valid_singular_constructor_param()
+
+=item get_valid_multiple_constructor_param()
+
+=item get_template_candidates()
+
+=item get_include_candidates()
+
+=item get_additional_dependencies()
+
+=back
+
+=head1 NOTES ON INTERNAL IMPLEMENTATION AND OTHER GORY DETAILS
+
+=head2 Parsing and Compilation
+
+=head2 Template Program Optimization
+
+=head2 Template Program Execution
+
+=head2 Internal Constants
+
+General indices:
+
+=over
+
+=item SELF
+
+=item OP_LHS
+
+=item OP_RHS
+
+=back
+
+Compiled statement indices:
+
+=over
+
+=item LINE_INSTR
+
+=item LINE_POS
+
+=item LINE_ARG
+
+=back
+
+Instruction opcodes:
+
+=over
+
+=item LITERAL
+
+=item DEBUG
+
+=item EXPR
+
+=item JUMP
+
+=item JUMP_IF
+
+=item FOR
+
+=item END_FOR
+
+=item CONTEXT_PUSH
+
+=item CONTEXT_POP
+
+=item LOCAL_SYNTAX
+
+=back
+
+Expression opcodes:
+
+=over
+
+=item OP_TREE
+
+=item UNARY_OP
+
+=item FUNC
+
+=item METHOD
+
+=item VAR
+
+=item TEMPLATE
+
+=back
+
+Template function array indices:
+
+=over
+
+=item FUNC_FUNC
+
+=item FUNC_ARG_NUM
+
+=item FUNC_NEEDS_TEMPLATE
+
+=item FUNC_INCONST
+
+=item FUNC_UNDEF_OK
+
+=back
+
+=head1 PERFORMANCE CONSIDERATIONS AND METRICS
+
+=head2 Method Calls
+
+=head2 Constant-folding vs Operators
+
+=head1 PRIVATE AND SEMI-PRIVATE METHODS
+
+=over
+
+=item C<< $template->compile() >>
+
+=item C<< $template->find_template >>
+
+=item C<< $template->find_include >>
+
+=item C<< $template->cache_key >>
+
+=item C<< $template->log_error >>
+
+=item C<< $template->log_warning >>
+
+=item C<< $template->error >>
+
+=item C<< $template->caller_error >>
+
+=item C<< $template->fatal_exit >>
+
+=item C<< $template->caller_fatal_exit >>
+
+=item C<< $template->warning >>
+
+=item C<< $template->caller_warning >>
+
+=back
+
+=head1 QUALITY ASSURANCE AND TEST METRICS
+
+Currently there are 925 tests within the distribution, with coverage:
+
+ ---------------------------- ------ ------ ------ ------ ------ ------ ------
+ File                           stmt   bran   cond    sub    pod   time  total
+ ---------------------------- ------ ------ ------ ------ ------ ------ ------
+ blib/lib/Template/Sandbox.pm   98.5   90.6   85.9  100.0    0.0  100.0   92.4
+ Total                          98.5   90.6   85.9  100.0    0.0  100.0   92.4
+ ---------------------------- ------ ------ ------ ------ ------ ------ ------
+
+You can generate this report within the distribution's directory by:
+
+   perl Build.PL
+   ./Build testcover
+
+Pretty HTML reports will also be produced in the C<< cover_db/ >> subdirectory.
+
+=head2 Why these coverage figures will never be 100%
+
+Most uncovered statements and branches are "cannot happen" internal
+sanity checks, the low conditional coverage reflects frequent use of
+
+  function( $thing ) || $thing
+
+constructs with always-true values vs the slower:
+
+  function( $thing ) ? function( $thing ) : $thing
+
+L<Devel::Cover> then thinks (correctly but irrelevently for this purpose)
+that the false-false case hasn't been tested and so gives a 67% coverage
+to the condition.
+
+=head1 KNOWN ISSUES AND BUGS
+
+=over
+
+=item caller_error() and caller_warning() currently degraded.
+
+L<Carp> currently is intermittantly taking fatal issue in certain
+places when generating carp() or croak()s, until I've resolved this
+issue these two methods behave as the error() and warning() messages
+and don't report from the perspective of your calling code.
+
+=item line numbers and char counts partially broken.
+
+Currently line numbers and character counts into the original file
+are occassionally incorrect in a number of situations including
+(but not limited to) define replacement and a couple of other as-yet
+unknown factors pending investigation.  This will be fixed in a later
+version.
+
+=item C<cr> special variable instead of C<\n>.
+
+Needing to use C<cr> as a special variable instead of the expected C<\n>
+interpolation in strings is pretty ugly and awkward.
+
+=item No C<last> or C<continue> within loops.
+
+Although it helps prevent people getting too exotic with the complexity
+in their templates, instead of in the application layer where it probably
+belongs, having no C<last> or C<continue> can definitely be counted as
+a missing feature.
+
+=item Can't set C<filename> scoped variable in an include.
+
+Because the C<include> statement internally uses the C<filename> argument
+name to pass the name of the included file around, this prevents you from
+setting up a C<filename> variable local to the include from the include
+statement, eg:
+
+  <: include included_file.html filename=widget.selected_file :>
+
+Will in fact try to include a file named 'widget.selected_file' when
+the template is compiled.
+
+The include statement should probabably use an internal argument name
+that isn't going to clash in this manner.
+
+=item Flow Control Constructs inside multiple files.
+
+Building an C<if>-construct or C<for>-loop where the statements are
+in different files is currently unsupported and undefined in behavior,
+it I<might> do what you want, it might not. It may just die horribly.
+It may not do any of those things consistently. It is certainly subject
+to change in future versions, when the behaviour may become defined.
+
+Note that it's perfectly ok to I<span> multiple files, as long as the
+include statement is entirely nested within the flow control structure,
+ie, this is fine and expected:
+
+  <: for row in table :>
+  <: include table_row.html :>
+  <: end for :>
+
+This however will probably cause problems:
+
+  <: if a :>
+  A is true.
+  <: include subclauses.html :>
+  <: else :>
+  Nothing is true.
+  <: endif :>
+
+Then in subclauses.html:
+
+  <: elsif b :>
+  B is true.
+
+Quite what it will do in this situation is undefined and subject
+to a number of variables depending on the exact circumstances, what
+I<is> certain is that it won't reliabily be behaving I<correctly>.
+
+=back
+
+=head1 SEE ALSO
+
+L<Template::Sandbox::Library>, L<Cache::CacheFactory>, L<Cache::Cache>
+
+=head1 SUPPORT
+
+You can find documentation for this module with the perldoc command.
+
+    perldoc Template::Sandbox
+
+
+You can also look for information at:
+
+=over 4
+
+=item * RT: CPAN's request tracker
+
+L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Template-Sandbox>
+
+=item * AnnoCPAN: Annotated CPAN documentation
+
+L<http://annocpan.org/dist/Template-Sandbox>
+
+=item * CPAN Ratings
+
+L<http://cpanratings.perl.org/d/Template-Sandbox>
+
+=item * Search CPAN
+
+L<http://search.cpan.org/dist/Template-Sandbox>
+
+=back
+
+=head1 AUTHORS
+
+Original author: Sam Graham <libtemplate-sandbox-perl BLAHBLAH illusori.co.uk>
+
+Last author:     $Author: illusori $
+
+=head1 COPYRIGHT & LICENSE
+
+Copyright 2005-2009 Sam Graham, all rights reserved.
+
+This library is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself.
+
+=cut

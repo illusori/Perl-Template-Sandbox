@@ -50,7 +50,7 @@ my ( $num_basic_tests, $num_if_tests, $num_for_tests );
               'elsif y', 'elseif y', 'else if y',
               'elsunless y', 'elseunless y', 'else unless y',
             );
-@if_three = ( '', 'else' );
+@if_three = ( '', 'else', 'elsif z', );
 @if_four  = ( 'endif', 'end if', 'endunless', 'end unless' );
 @for_one  = ( 'for x in y', 'foreach x in y' );
 @for_two  = ( 'endfor', 'end for', 'endforeach', 'end foreach' );

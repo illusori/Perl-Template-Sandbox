@@ -13,7 +13,7 @@ BEGIN
     plan skip_all => "Test::Exception required for testing syntax errors" if @_;
 }
 
-plan tests => 10;
+plan tests => 12;
 
 my ( $template, $syntax );
 
@@ -96,3 +96,19 @@ $template = Template::Sandbox->new();
 throws_ok { $template->set_template_string( $syntax ) }
     qr/compile error: endif found without opening if, elsif or else at line 1, char 28 of/,
     '<: endif :> inside for block';
+
+#
+#  11: <: else :> before <: endfor :>
+$syntax = '<: if x :><: for y in z :>a<: else :><: endfor :>';
+$template = Template::Sandbox->new();
+throws_ok { $template->set_template_string( $syntax ) }
+    qr/compile error: else found without opening if or elsif at line 1, char 28 of/,
+    '<: else :> inside for block';
+
+#
+#  12: <: elsif :> before <: endfor :>
+$syntax = '<: if x :><: for y in z :>a<: elsif y :><: endfor :>';
+$template = Template::Sandbox->new();
+throws_ok { $template->set_template_string( $syntax ) }
+    qr/compile error: elsif found without opening if or elsif at line 1, char 28 of/,
+    '<: elsif :> inside for block';

@@ -23,3 +23,5 @@ foreach my $exported ( @function_sugar )
 {
     ok( exists( ${main::}{ $exported } ), "function $exported exported" );
 }
+
+#  TODO:  test def_func

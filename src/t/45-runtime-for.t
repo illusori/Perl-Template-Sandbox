@@ -7,7 +7,7 @@ use Test::More;
 
 use Template::Sandbox;
 
-plan tests => 16;
+plan tests => 24;
 
 my ( $template, $syntax );
 
@@ -130,3 +130,89 @@ $template = Template::Sandbox->new();
 $template->add_var( y => { one => 'ONE', two => 'TWO', three => 'THREE' } );
 $template->set_template_string( $syntax );
 is( ${$template->run()}, 'one => ONE, three => THREE, two => TWO, ', 'for iterator=x set=y syntax' );
+
+#
+#  17: nested loops across independent hashes (alpha sorted by keys)
+$syntax = "<: for x in y :><: expr x :> => <: expr x.__value__ :>(<: for a in b :><: expr a :> => <: expr a.__value__ :>,<: endfor :>) <: endfor :>";
+$template = Template::Sandbox->new();
+$template->add_var( y => { one => 'ONE', two => 'TWO', three => 'THREE' } );
+$template->add_var( b => { aaa => 'AAA', bbb => 'BBB', ccc => 'CCC' } );
+$template->set_template_string( $syntax );
+is( ${$template->run()}, 'one => ONE(aaa => AAA,bbb => BBB,ccc => CCC,) three => THREE(aaa => AAA,bbb => BBB,ccc => CCC,) two => TWO(aaa => AAA,bbb => BBB,ccc => CCC,) ', 'nested-for independent-hashes' );
+
+#
+#  18: nested loops across nested hashes (alpha sorted by keys)
+$syntax = "<: for x in y :><: expr x :> => (<: for z in x.__value__ :><: expr z :> => <: expr z.__value__ :>,<: endfor :>) <: endfor :>";
+$template = Template::Sandbox->new();
+$template->add_var( y =>
+    {
+        one   => { oneone => 'ONEONE', onetwo => 'ONETWO', },
+        two   => { twoone => 'TWOAAA', },
+        three => { threeone => 'THREEXXX', threetwo => 'THREEYYY' },
+    } );
+$template->set_template_string( $syntax );
+is( ${$template->run()}, 'one => (oneone => ONEONE,onetwo => ONETWO,) three => (threeone => THREEXXX,threetwo => THREEYYY,) two => (twoone => TWOAAA,) ', 'nested-for nested-hashes' );
+
+#
+#  19: for across undef value.
+$syntax = "start <: for x in y :>shouldn't happen <: endfor :>end";
+$template = Template::Sandbox->new();
+$template->set_template_string( $syntax );
+is( ${$template->run()}, 'start end',
+    'for across undef value' );
+
+#
+#  20: for across empty array.
+$syntax = "start <: for x in y :>shouldn't happen <: endfor :>end";
+$template = Template::Sandbox->new();
+$template->set_template_string( $syntax );
+$template->add_var( y => [] );
+is( ${$template->run()}, 'start end',
+    'for across empty array' );
+
+#
+#  21: for across empty hash.
+$syntax = "start <: for x in y :>shouldn't happen <: endfor :>end";
+$template = Template::Sandbox->new();
+$template->set_template_string( $syntax );
+$template->add_var( y => {} );
+is( ${$template->run()}, 'start end',
+    'for across empty hash' );
+
+#
+#  22: loop variable masks template var.
+$syntax = "<: expr a :> <: for a in y :><: expr a :> <: endfor :><: expr a :>";
+$template = Template::Sandbox->new();
+$template->set_template_string( $syntax );
+$template->add_vars( {
+    a => 22,
+    y => [ 1, 2, ],
+    } );
+is( ${$template->run()}, '22 1 2 22',
+    'same-name loop-var masks template-var' );
+
+#
+#  23: reuse loop variable checking inner masks outer.
+$syntax = "<: for x in y :><: for x in z :><: expr x :> <: endfor :><: endfor :>";
+$template = Template::Sandbox->new();
+$template->set_template_string( $syntax );
+$template->add_vars( {
+    y => [ 1, 2, ],
+    z => [ 10, 11 ],
+    } );
+is( ${$template->run()}, '10 11 10 11 ',
+    'same-name inner loop-var masks outer loop-var' );
+
+#
+#  24: x.__value__[ z ] instead of z.__value__
+$syntax = "<: for x in y :><: expr x :> => (<: for z in x.__value__ :><: expr z :> => <: expr x.__value__[ z ] :>,<: endfor :>) <: endfor :>";
+$template = Template::Sandbox->new();
+$template->add_var( y =>
+    {
+        one   => { oneone => 'ONEONE', onetwo => 'ONETWO', },
+        two   => { twoone => 'TWOAAA', },
+        three => { threeone => 'THREEXXX', threetwo => 'THREEYYY' },
+    } );
+$template->set_template_string( $syntax );
+is( ${$template->run()}, 'one => (oneone => ONEONE,onetwo => ONETWO,) three => (threeone => THREEXXX,threetwo => THREEYYY,) two => (twoone => TWOAAA,) ',
+    'loop-var expr subscript of outer loop-var special-value' );
