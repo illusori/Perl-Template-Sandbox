@@ -5,6 +5,8 @@ use warnings;
 
 use Carp;
 
+use Template::Sandbox;
+
 my %function_library = ();
 my %function_tags    = ();
 
@@ -17,11 +19,7 @@ sub import
 {
     my $pkg = shift;
 
-    if( @_ )
-    {
-        require 'Template::Sandbox';
-        export_template_functions( $pkg, 'Template::Sandbox', @_ );
-    }
+    export_template_functions( $pkg, 'Template::Sandbox', @_ ) if @_;
 }
 
 sub export_template_functions
@@ -31,7 +29,7 @@ sub export_template_functions
 
     $pkg = ref( $this ) || $this;
 
-    carp "\"$pkg\" does not appear to be a template function library."
+    croak "\"$pkg\" does not appear to be a template function library."
         unless $function_library{ $pkg };
 
     $library = $function_library{ $pkg };
@@ -60,7 +58,7 @@ sub export_template_functions
                 }
                 else
                 {
-                    carp "\"$word\" is not a template library tag in $pkg";
+                    croak "\"$word\" is not a template library tag in $pkg";
                 }
 
                 if( $delete )
@@ -91,7 +89,7 @@ sub export_template_functions
     @functions = ();
     foreach my $name ( keys( %export ) )
     {
-        carp "\"$name\" is not a template library function in $pkg"
+        croak "\"$name\" is not a template library function in $pkg"
             unless $library->{ $name };
 
         push @functions, $name => $library->{ $name }
