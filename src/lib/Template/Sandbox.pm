@@ -772,7 +772,9 @@ sub initialize
     {
         foreach my $arg ( @{$param->{ library }} )
         {
-#  TODO: library export
+            eval "use $arg->[ 0 ];";
+            $arg->[ 0 ]->export_template_functions( $self,
+                @{$arg}[ 1..$#{$arg} ] );
         }
     }
 
