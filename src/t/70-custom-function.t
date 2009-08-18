@@ -10,7 +10,7 @@ use Template::Sandbox qw/:function_sugar/;
 BEGIN
 {
     eval "use Test::Exception";
-    plan skip_all => "Test::Exception required for testing custom syntax" if @_;
+    plan skip_all => "Test::Exception required for testing custom functions" if @_;
 }
 
 plan tests => 63;
