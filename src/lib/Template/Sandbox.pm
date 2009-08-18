@@ -891,6 +891,7 @@ sub set_template
     }
 
     $self->{ filename }    = $self->find_template( $filename, Cwd::cwd() );
+    delete $self->{ template };
     $defines->{ FILENAME } = $self->{ filename };
     #  TODO:  probably should use File::Spec.
     $defines->{ DIR }      = ( $filename =~ /^(.*)\/(.*?)$/ ) ? $1 : '';
@@ -982,6 +983,7 @@ sub set_template_string
 
     #  Erk.  Better way of making this cacheable surely?
     $self->{ filename }    = 'string:///' . $template_string;
+    delete $self->{ template };
     $defines->{ FILENAME } = $self->{ filename };
     $defines->{ DIR }      = Cwd::cwd();
 
@@ -3459,6 +3461,8 @@ the class function is later removed then the function will still be
 available to templates run by this instance.
 
 See the section L</"Custom Template Functions"> for more details.
+
+=head2 B<library>
 
 =head2 B<template_syntax> => I<template syntax definition>
 
