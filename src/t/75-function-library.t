@@ -11,7 +11,7 @@ use Template::Sandbox::Library;
 BEGIN
 {
     eval "use Test::Exception";
-    plan skip_all => "Test::Exception required for testing custom syntax" if @_;
+    plan skip_all => "Test::Exception required for testing function libraries" if @_;
 }
 
 my ( $num_single_tests );
@@ -27,35 +27,6 @@ $num_tests = $num_single_tests +
 
 plan tests => $num_tests;
 
-#  TODO:  Surely there's a Test:: module for this?
-#         Test::Trap looks to clash with Test::Exception and not old perls.
-sub warns_ok( &$$ )
-{
-    my ( $test, $like, $desc ) = @_;
-    my ( $warning_contents );
-
-    {
-        $warning_contents = '';
-        local $SIG{ __WARN__ } = sub { $warning_contents .= $_[ 0 ]; };
-        $test->();
-    }
-
-    like( $warning_contents, $like, $desc );
-}
-sub doesnt_warn( &$ )
-{
-    my ( $test, $desc ) = @_;
-    my ( $warning_contents );
-
-    {
-        $warning_contents = '';
-        local $SIG{ __WARN__ } = sub { $warning_contents .= $_[ 0 ]; };
-        $test->();
-    }
-
-    is( $warning_contents, '', $desc );
-}
-    
 package Template::Sandbox::TestLibrary;
 
 use base 'Template::Sandbox::Library';
