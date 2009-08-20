@@ -4379,19 +4379,78 @@ possible to disable I<zero-width folding>.
 
 =head2 Useful methods to override when subclassing
 
+These methods are likely to be of interest to you when subclassing
+L<Template::Sandbox>.
+
 =over
 
-=item initialize()
+=item $template->initialize( I<%param> )
 
-=item get_valid_singular_constructor_param()
+Called as part of the constructor, C<initialize()> is designed for
+you to override, with the hash C<%param> passed as a single argument
+containing the merged valid parameters passed to the constructor.
 
-=item get_valid_multiple_constructor_param()
+If you override this method, make sure that you call
+C<< $self->SUPER::initialize( %param ) >> at some point, otherwise
+L<Template::Sandbox> won't get chance to do its own initialization.
 
-=item get_template_candidates()
+Singular param (see below) will be supplied as a single value in
+C<%param>.  Multiple param will be supplied as an arrayref of
+the I<exact> values that were passed to the constructor, this
+means that if you pass an arrayref of values I<as> the param,
+you will end up with an arrayref of arrayref(s).
 
-=item get_include_candidates()
+=item $template->get_valid_singular_constructor_param()
+
+=item $template->get_valid_multiple_constructor_param()
+
+Override these methods to add to the list of valid parameters that
+the constructor should accept and place into the C<%param> passed
+to C<initialize()>. Make sure that you include the contents of
+C<< $self->SUPER::get_valid_singular_constructor_param() >> or
+C<< $self->SUPER::get_valid_multiple_constructor_param() >> otherwise
+the standard paramaters won't be accepted as valid.
+
+The I<singular> version lists those param that may only be supplied
+once to the constructor, and I<multiple> for those that may be
+supplied more than once.
+
+=item $template->get_template_candidates( I<$filename>, I<$dir> )
+
+=item $template->get_include_candidates( I<$filename>, I<$dir> )
+
+These two methods are called to find the candidate filenames to
+check for existence before loading a template.
+
+They're supplied filename as passed to the C<template> constructor
+option or the C<< $template->set_template( $filename ) >> method,
+and the I<current directory>.
+
+The current directory is the current working directory for templates
+and the directory of the template doing the including for includes.
+
+The list they return will be iterated through until the first file
+that actually exists is found, which will then be used as the template
+file.
+
+This would allow you to, for example, make your subclass cascade back
+up a directory structure looking for a matching filename, or to
+search through a list of include directories.
+
+Note that the I<filename> parameter I<does not> have any C<template_root>
+prepended, the behaviour of C<template_root> is in fact implemented
+within the default version of C<< $template->get_template_candidates() >>
+and you are free to support or ignore the behaviour in your implementation.
 
 =item get_additional_dependencies()
+
+This method is called when building a list of dependencies for the
+current template for the purposes of checking if the cached version
+of a compiled template is still fresh.
+
+If for some reason your subclass contains dependencies that are not
+discovered by the existing methods, you can provide your own mechanism
+here to add more to the list.
 
 =back
 
