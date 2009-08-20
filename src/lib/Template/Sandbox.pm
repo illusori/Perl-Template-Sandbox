@@ -4422,7 +4422,7 @@ supplied more than once.
 These two methods are called to find the candidate filenames to
 check for existence before loading a template.
 
-They're supplied filename as passed to the C<template> constructor
+They're supplied the filename as passed to the C<template> constructor
 option or the C<< $template->set_template( $filename ) >> method,
 and the I<current directory>.
 
@@ -4442,7 +4442,7 @@ prepended, the behaviour of C<template_root> is in fact implemented
 within the default version of C<< $template->get_template_candidates() >>
 and you are free to support or ignore the behaviour in your implementation.
 
-=item get_additional_dependencies()
+=item $template->get_additional_dependencies()
 
 This method is called when building a list of dependencies for the
 current template for the purposes of checking if the cached version
@@ -4451,6 +4451,11 @@ of a compiled template is still fresh.
 If for some reason your subclass contains dependencies that are not
 discovered by the existing methods, you can provide your own mechanism
 here to add more to the list.
+
+An example could be if some behaviour of the compile of your template
+is effected by entries your application's config file, you could return
+the filename of the config file here, and whenever the config file is
+updated any old cache entries will be invalidated.
 
 =back
 
@@ -4723,29 +4728,61 @@ Template function array indices:
 
 =over
 
-=item C<< $template->compile() >>
+=item $template->find_template( I<$filename>, I<$current_dir> )
 
-=item C<< $template->find_template >>
+=item $template->find_include( I<$filename>, I<$current_dir> )
 
-=item C<< $template->find_include >>
+These two methods find a matching template for the given filename and
+dir, they basically query C<< $template->get_template_candidates() >>
+or C<< $template->get_include_candidates() >> and then traverse the
+list looking for a file that exists.
 
-=item C<< $template->cache_key >>
+=item $template->cache_key( I<$keys> )
 
-=item C<< $template->log_error >>
+Takes a hashref of parameters that uniquely identify the factors that
+could alter the compiled template and produces a scalar value suitable
+to use as a cache key.
 
-=item C<< $template->log_warning >>
+In practice the key is a hashref of the defines (including template
+filename) used in compiling the template, and the result is an MD5
+hexdigest of a canonical C<nfreeze( $keys )> from L<Storable.pm>.
 
-=item C<< $template->error >>
+=item $template->log_error( I<$message> )
 
-=item C<< $template->caller_error >>
+=item $template->log_warning( I<$message> )
 
-=item C<< $template->fatal_exit >>
+Logs I<$message> with the logger object as an error or warning.
 
-=item C<< $template->caller_fatal_exit >>
+=item $template->error( I<@message_fragments> )
 
-=item C<< $template->warning >>
+=item $template->caller_error( I<@message_fragments> )
 
-=item C<< $template->caller_warning >>
+Raises (and logs) an error with the message produced by concatinating
+C<@message_fragments> into a single string.  C<caller_error()> reports
+the error from the point of view of the calling code.
+
+The error will have any relevent information to do with the current
+template position added.
+
+=item $template->fatal_exit( I<$message> )
+
+=item $template->caller_fatal_exit( I<$message> )
+
+These two do the actual C<die> or C<croak> needed by
+C<error> and C<caller_error>, you can override these if you
+want to prevent the C<die> or C<croak> and perform some other
+behaviour.
+
+=item $template->warning( I<@message_fragments> )
+
+=item $template->caller_warning( I<@message_fragments> )
+
+Raise (and log) a warning with a message composed of the message
+fragments provided.  C<caller_warning()> raises the warning from
+the perspective of the caller.
+
+The warning will have any relevent information to do with the current
+template position added.
 
 =back
 
