@@ -3236,6 +3236,8 @@ Template::Sandbox - templates safely sandboxed from your application.
 
    <: if user :>
    <p>Welcome back, <: expr user.name :>.</p>
+   <: else :>
+   <p>Welcome,</p>
    <: endif :>
    <p>Recent Transactions:</p>
    <table>
@@ -3438,7 +3440,16 @@ available to templates run by this instance.
 
 See the section L</"Custom Template Functions"> for more details.
 
-=head2 B<library>
+=head2 B<library> => [ I<$library> => I<@import> ]
+
+This will import the list of I<template functions> or I<import tags>
+listed in I<@import> from the template function libary I<$library>.
+
+This is equivilent to calling:
+
+  $library->export_template_functions( $template, @import );
+
+For more details see L<Template::Sandbox::Library>.
 
 =head2 B<template_syntax> => I<template syntax definition>
 
@@ -4180,15 +4191,92 @@ value in the hash.
 
 =head1 COMPILE DEFINES
 
-${NAME}
+I<Compile defines> are a special type of variable that get replaced at
+compile-time (to be picky, they actually get replaced at template-read
+time, before compilation is done.)
+
+This means two things: 1) they're constant and cannot change during
+repeated runs of the same compiled template, or within a single run;
+2) they can contain anything you like, including fragments of template
+statements rather that just values to use in an I<expression>.
+
+You can set I<Compile defines> at two stages, either when you call
+C<< $template->set_template( $filename, $defines ) >> (or
+C<set_template_string>), or as parameters to an C<include> statement
+(for more details look at L</"INCLUDES">).
+
+However you set them, a I<compile define> is a symbol consisting of
+an entirely UPPERCASE name, that will be used for literal replacement
+within the template contents being read.
+
+The template is scanned looking for constructs of the form:
+
+  ${NAME}
+  ${NAME:default}
+  ${'NAME'}
+  ${'NAME:default'}
+
+And will replace them according to the rules below.
+
+=head2 Plain Compile Defines
+
+If the token being replaced has the form C<${NAME}>, the contents
+of the define will be substituted verbatim into the source of the
+template being read.
 
 =head2 Compile Define Defaults
 
-${NAME:default}
+If the token has form C<${NAME:default}>, then if there is a
+I<compile define> with name C<NAME> with a defined value, that
+will be used for substitution, otherwise the value of C<default>
+will be used, ie:
+
+  Welcome to ${PAGEOWNER:Fred}'s Home Page!
+
+would produce one of:
+
+  Welcome to Joe's Home Page!
+
+or:
+
+  Welcome to Fred's Home Page!
+
+when run with PAGEOWNER defined as 'Joe' or undefined.
 
 =head2 Quoted Compile Defines
 
-${'NAME'} and ${'NAME:default'}
+If the token takes the form C<${'NAME'}> or C<${'NAME:default'}>
+then replacement is done as above, with the addition that the replacement
+is enclosed in single-quotes (') and has the contents escaped correctly
+to be safe within those enclosing single-quotes.
+
+This is mostly useful if you wish to include the contents of a I<compile
+define> within an I<expression> as a string, but are unsure if the define
+will contain single-quotes that would terminate your string and produce
+syntax errors, and wish to avoid placing the burden of proper escaping on
+whoever is setting the define's value.
+
+For example, you wish to have an alert_header.html:
+
+  <p class="alert">
+  <: expr html_escape( ${'MOTD'} ) :>
+  </p>
+
+and in the main navigation template for your side you want to do:
+
+  <: include alert_header.html
+     MOTD="We're currently experiencing some service disruptions, please bear with us" :>
+
+This will be replaced and produce the safe output of:
+
+  <p class="alert">
+  <: expr html_escape( 'We\'re currently experiencing some service disruptions, please bear with us' ) :>
+  </p>
+
+Without the C<${'MOTD'}> quoting mechanism, you would need to manually escape
+the contents of C<MOTD> when you set it within the C<include> statement.
+While this may be possible, it's inconvenient and the sort of thing you're
+likely to accidentally forget to do.
 
 =head1 CUSTOM TEMPLATE FUNCTIONS
 
