@@ -18,7 +18,7 @@ my ( $num_single_tests );
 my ( $num_instance_imports, $num_import_tests );
 my ( $num_tests );
 
-$num_single_tests     = 42;
+$num_single_tests     = 45;
 $num_instance_imports = 2;
 $num_import_tests     = 18;
 
@@ -26,6 +26,35 @@ $num_tests = $num_single_tests +
     ( $num_instance_imports * $num_import_tests );
 
 plan tests => $num_tests;
+
+#  TODO:  Surely there's a Test:: module for this?
+#         Test::Trap looks to clash with Test::Exception and not old perls.
+sub warns_ok( &$$ )
+{
+    my ( $test, $like, $desc ) = @_;
+    my ( $warning_contents );
+
+    {
+        $warning_contents = '';
+        local $SIG{ __WARN__ } = sub { $warning_contents .= $_[ 0 ]; };
+        $test->();
+    }
+
+    like( $warning_contents, $like, $desc );
+}
+sub doesnt_warn( &$ )
+{
+    my ( $test, $desc ) = @_;
+    my ( $warning_contents );
+
+    {
+        $warning_contents = '';
+        local $SIG{ __WARN__ } = sub { $warning_contents .= $_[ 0 ]; };
+        $test->();
+    }
+
+    is( $warning_contents, '', $desc );
+}
 
 package Template::Sandbox::TestLibrary;
 
@@ -366,3 +395,32 @@ throws_ok {
     }
     qr/"no_such_tag" is not a template library tag in Template::Sandbox::TestLibrary at/,
     "error on attempted export of non-existing tag";
+
+#
+#  43: No error on empty import.
+$template = Template::Sandbox->new();
+lives_ok {
+    Template::Sandbox::TestLibrary->export_template_functions(
+        $template, '' );
+    }
+    "no error on empty import";
+
+#
+#  44: No warning on import of duplicate functions
+$template = Template::Sandbox->new();
+doesnt_warn {
+    Template::Sandbox::TestLibrary->export_template_functions(
+        $template, ':one_and_two first_function' );
+    }
+    "no warning on single-import of duplicate functions";
+
+#
+#  45: No warning on duplicate import
+$template = Template::Sandbox->new();
+doesnt_warn {
+    Template::Sandbox::TestLibrary->export_template_functions(
+        $template, 'first_function' );
+    Template::Sandbox::TestLibrary->export_template_functions(
+        $template, 'first_function' );
+    }
+    "no warning on duplicate-import of duplicate functions";
