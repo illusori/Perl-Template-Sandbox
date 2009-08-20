@@ -13,7 +13,7 @@ BEGIN
     plan skip_all => "Test::Exception required for testing custom syntax" if @_;
 }
 
-plan tests => 39;
+plan tests => 41;
 
 #  TODO:  Surely there's a Test:: module for this?
 #         Test::Trap looks to clash with Test::Exception and not old perls.
@@ -333,7 +333,7 @@ is( ${$template->run()}, '',
     'undef custom syntax run provides no content' );
 
 #
-#  34-36: bad syntax definition args to constructor.
+#  34-37: bad syntax definition args to constructor.
 throws_ok
     {
         $template = Template::Sandbox->new(
@@ -343,7 +343,17 @@ throws_ok
             );
     }
     qr/Template initialization error: Bad template syntax '$token' to register_template_syntax\(\), expected hash ref, got: 'expecting a hashref\? tough luck\.' at [^\s]*\/Template\/Sandbox\.pm line/,
-    'error on bad definition for construct-option custom syntax';
+    'error on bad definition (string) for construct-option custom syntax';
+throws_ok
+    {
+        $template = Template::Sandbox->new(
+            template_syntax => [
+                $token => [ 'expecting a hashref? tough luck.' ],
+                ],
+            );
+    }
+    qr/Template initialization error: Bad template syntax '$token' to register_template_syntax\(\), expected hash ref, got: ARRAY at [^\s]*\/Template\/Sandbox\.pm line/,
+    'error on bad definition (arrayref) for construct-option custom syntax';
 throws_ok
     {
         $template = Template::Sandbox->new(
@@ -371,7 +381,7 @@ throws_ok
     'error on missing run callback for construct-option custom syntax';
 
 #
-#  37-39: bad syntax definition args to constructor.
+#  38-41: bad syntax definition args to constructor.
 $template->new();
 throws_ok
     {
@@ -380,7 +390,15 @@ throws_ok
             );
     }
     qr/Template error: Bad template syntax '$token' to register_template_syntax\(\), expected hash ref, got: 'expecting a hashref\? tough luck\.' at [^\s]*\/Template\/Sandbox\.pm line/,
-    'error on bad definition for post-construct custom syntax';
+    'error on bad definition (string) for post-construct custom syntax';
+throws_ok
+    {
+        $template->register_template_syntax(
+            $token => [ 'expecting a hashref? tough luck.' ],
+            );
+    }
+    qr/Template error: Bad template syntax '$token' to register_template_syntax\(\), expected hash ref, got: ARRAY at [^\s]*\/Template\/Sandbox\.pm line/,
+    'error on bad definition (arrayref) for post-construct custom syntax';
 throws_ok
     {
         $template->register_template_syntax(
@@ -404,6 +422,5 @@ throws_ok
     'error on missing run callback for post-construct custom syntax';
 
 
-#  TODO: error on arrayref as custom syntax def.
 #  TODO: multiple custom syntaxes as single constructor param
 #  TODO: multiple custom syntaxes as multiple constructor param
