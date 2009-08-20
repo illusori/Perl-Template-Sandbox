@@ -1383,29 +1383,6 @@ sub _parse_args
             $instr = 1;
         }
     }
-#  TODO: remove
-#    #  Merge $[...] url args.
-#    $instr = 0;
-#    for( $count = 0; $count <= $#words; $count++ )
-#    {
-#        if( $instr )
-#        {
-#            $instr = 0 if $words[ $count ] =~ /\]\=/;
-#            $words[ $count - 1 ] .= ' ' . $words[ $count ];
-#            @words =
-#                ( @words[ 0..$count - 1 ], @words[ $count + 1..$#words ] );
-#            $count--;
-#        }
-#        else
-#        {
-#            next unless $words[ $count ] =~ /^\$\[/;
-#            next if $words[ $count ] =~ /\]\=/;
-#            $instr = 1;
-#        }
-#    }
-
-#my ( $warning_happened );
-#local $SIG{__WARN__} = sub { $warning_happened = 1; print "Content-type: text/plain\n\n"; };
 
     #  Split into positional parameters and keyword paramaters.
     for( $count = 0; $count <= $#words; $count++ )
@@ -1426,7 +1403,6 @@ sub _parse_args
     {
         $word = $1 if $word =~ /^\"(.*)\"$/;
         $param{ $positions[ $count++ ] } = $word;
-#print "parse_args( $args, $type )\n" if $warning_happened;
     }
 
     foreach my $word ( @keyword_param )
@@ -1437,7 +1413,6 @@ sub _parse_args
 
         unless( defined( $value ) )
         {
-            #  TODO: error here.
             $self->error( "Undefined value for keyword: '$keyword' on " .
                 "parse_args( $args, $type )" );
         }
@@ -1447,8 +1422,6 @@ sub _parse_args
         #  TODO: validate arg names.
         $param{ $keyword } = $value;
     }
-
-#$self->warning( "Read param for <: $type $args :> as: ", Data::Dumper::Dumper( \%param ), "\n" ) if $type eq 'include';
 
     return( { %param } );
 }
@@ -4284,10 +4257,13 @@ Now within your templates you can do the following sorts of things:
 
 Indicates that the function returns a value that is not constant even
 if the arguments are constant, and that the function should not be
-subject to constant-folding optimizations at compile time.
+subject to constant-folding optimizations at compile time. You should
+also use this if the function returns a constant value for constant
+input but has an important side-effect that must happen each call.
 
 Some examples of inconstant functions in Perl would be C<time()> or
-C<random()>.
+C<random()>, where the return varies for constant input; or C<flock()>
+where the side-effect needs to happen at run-time.
 
 =item needs_template
 
@@ -4356,6 +4332,47 @@ state-of-play is documented here in case you need to make use of it.
 
 =head1 ZERO-WIDTH FOLDING
 
+Flow control statements (such as C<if> and C<for>) and C<include>
+statements are subject to I<zero-width folding>, this means that the
+existence of the statement token itself should be treated as invisible
+to the output of your document, even if for clarity reasons the token
+has been placed on a single line by itself.
+
+Cutting through the jargon, what this means is that these statements
+won't liberally sprinkle newlines through your document if you do
+the following:
+
+  This is some text.
+  <: if a :>
+  Case a is true.
+  <: else :>
+  Case a is false.
+  <: endif :>
+  This is some more text.
+
+With zero-width folding, this produces (with C<a> true):
+
+  This is some text.
+  Case a is true.
+  This is some more text.
+
+Whereas without zero-width folding, the more literal output is probably
+not what you intended:
+
+  This is some text.
+
+  Case a is true.
+
+  This is some more text.
+
+This is because each clause of the C<if> statement actually has a newline
+preceding and trailing it, so while the statement itself produces no output
+you're left with doubled newlines - the I<zero-width folding> reduces these
+to the single newline you probably intended.
+
+It is not currently (and may never be, unless someone really needs it)
+possible to disable I<zero-width folding>.
+
 =head1 CACHING
 
 =head1 SUBCLASSING Template::Sandbox
@@ -4380,13 +4397,176 @@ state-of-play is documented here in case you need to make use of it.
 
 =head1 NOTES ON INTERNAL IMPLEMENTATION AND OTHER GORY DETAILS
 
+This section contains a lot of technical information on how
+L<Template::Sandbox> is implemented, you probably don't need
+to know any of this stuff, so feel free to skip this section
+entirely unless you're morbidly curious or feel it may be
+relevent to your use.
+
 =head2 Parsing and Compilation
 
+Parsing of templates is the first step of the compile phase, it's
+done by hand-crafted (and exceedingly ugly) regexps.
+
+These regexps make heavy use of the C<(??{ ... })> subexpression
+syntax to handle dealing with bracket- and quote-matching.
+
+Sorry to older Perls who don't understand this newfangled stuff.
+
+These regexps could run faster with some of the fancy new perl 5.10
+regexp syntaxes designed for subregexps, but 5.10 is a bit I<too>
+newfangled just now thanks.
+
+These regexps don't run across your entire template at once (thankfully),
+instead the template is broken down into I<hunks> by opening C<< <: >>
+and each I<hunk> is then proccessed in turn.
+
+The first stage of I<hunk> processing is to check that it fits the general
+format of a known statement, broadly: <: I<known_statement> I<some_stuff> :>,
+without being too fussy about what I<some_stuff> is, and dumping anything
+after the closing C<< :> >> onto the hunk queue.  Note that since we're not
+fussy about what's in I<some_stuff> this imposes limitations on whether we
+can check we've matched "the right" closing C<< :> >> or not, see
+L</"KNOWN ISSUES AND BUGS"> for more on this.
+
+Depending on the statement, I<some_stuff> gets further parsing with
+appropriate regexps and turned into an I<instruction> and
+I<arguments> (and sometimes some additional flags) for the compiled
+template program.
+
+In the case of loops and branches, a stack is maintained of any opening
+statements, and when the corresponding closing statements are produced
+the stack is popped and each branch has its jump target updated to point
+to the statement after the end of the construct.
+
+As you may deduce from the previous paragraph, the compiled program itself
+is a fairly simple linear list of instructions with jumps to implement
+flow-control, it could have been implemented as an abstract syntax tree
+or the like, but it wasn't. Although the structure of a compiled expression
+I<is> one, just to be contrary.
+
+If you're curious about the structure, you can make use of the
+C<< $template->_dumpable_template() >> method to produce a somewhat
+literal dump of the compiled program with a degree of human-readability
+(for I<strange> humans anyway).
+
 =head2 Template Program Optimization
+
+After compilation, several optimization passes are made over the
+template program to eliminate common inefficiencies:
+
+=over
+
+=item Expression Constant Folding.
+
+This doesn't actually happen within the optimization sweep, but instead
+happens as the expression arguments are compiled, it's documented here
+because this is where you'd expect to find the documentation.
+
+Expressions have I<constant-folding> applied at two main places:
+
+=over
+
+=item Operator Constant Folding
+
+If both sides of an operator are constant values then the operator is
+evaluated at compile-time and the result substituted as a constant itself.
+
+For unary operators the same occurs if the single argument is constant.
+
+Note that, currently, constant-folding only occurs if both sides of an
+operator are constant, even in the case where left-wise lazy-evaluation
+(aka "short circuit") with a constant LHS would make an inconstant RHS
+irrelevent.
+
+That is:
+
+  <: expr 42 || 0 :>
+
+Will be folded to 
+
+  <: expr 42 :>
+
+but:
+
+  <: expr 42 || a :>
+
+will not be folded even though, when run, the right-hand side will
+never be evaluated because C<42> is always true.
+
+=item Function Constant Folding
+
+If all arguments to a function are constant and the function I<wasn't>
+constructed with the C<inconstant> flag, then the function is evaluated
+at compile-time and the result substituted as a constant value.
+
+=back
+
+=item "Void Wrapping" of assigns.
+
+Not really an optimization, however this is performed at the same time
+as the optimization sweep: any assigns at the top level of an C<expr>
+statement are flagged as being in a void context so that they don't
+insert their value into the output of the document.
+
+=item Constant-Expression Constant Folding
+
+Any C<expr> statements that consist solely of a constant value are
+converted into a literal statement of that value. This doesn't check
+for I<constant-folding> within an I<expression> since that is done
+during the compilation stage of expressions automatically.
+
+=item Conditional Branch Constant Folding
+
+Any C<if> statement branches that are the result of a constant expression
+are either converted into unconditional branches or pruned entirely from
+the program accordingly.
+
+=item Context Folding
+
+Any cases of a C<CONTEXT_PUSH> where there is no need for a new context,
+such as an include of a file with no scoped variables, are removed.
+
+While the empty C<CONTEXT_PUSH> and C<CONTEXT_POP> itself is fairly painless
+it adds an extra loop iteration up the context stack to every variable
+evaluation within that context, which can rapidly add up, so pruning these
+is a surprisingly "big win".  This is also another good reason to use
+I<defines> within an C<include> statement where possible instead of
+I<scoped variables>. (See L</"Defines vs Scoped Variables"> for more
+details.)
+
+The equivilent context-folding for C<for> loops happens at run-time,
+a marginal gain could be made by pushing this up to the optimization
+sweep, but would result in significantly more complexity to achieve
+the same behaviour.
+
+=item Adjacent-Literal Constant Folding
+
+Any adjacent literal values are now merged into a single literal, unless
+there's a reason not to (such as the second being the target of a C<JUMP>
+instruction.)
+
+Especially after the pruning of previous optimizations, this can reduce the
+number of C<LITERAL> instructions quite significantly, and fewer instructions
+is always better, especially one so lightweight as C<LITERAL> where the
+overhead of running the instruction is disproportional to the actual
+work entailed in the instruction itself.
+
+=back
+
+There are several further candidates for optimizations on the TODO list,
+the most important is probably optimizing away the creation of special
+loop variables for a loop if they're not needed. A nice side effect of
+this would be that the code would be reusable to make the C<for> loop
+context-folding occur in the optimization sweep rather than at run-time.
 
 =head2 Template Program Execution
 
 =head2 Internal Constants
+
+The following internal constants are used within L<Template::Sandbox>
+and can be accessed via C<Template::Sandbox::CONSTANTNAME> if needed
+for some reason.
 
 General indices:
 
@@ -4474,6 +4654,8 @@ Template function array indices:
 
 =head1 PERFORMANCE CONSIDERATIONS AND METRICS
 
+=head2 Defines vs Scoped Variables
+
 =head2 Method Calls
 
 =head2 Constant-folding vs Operators
@@ -4515,14 +4697,11 @@ Currently there are 925 tests within the distribution, with coverage:
  ---------------------------- ------ ------ ------ ------ ------ ------ ------
  File                           stmt   bran   cond    sub    pod   time  total
  ---------------------------- ------ ------ ------ ------ ------ ------ ------
- blib/lib/Template/Sandbox.pm   98.5   90.6   85.9  100.0    0.0  100.0   92.4
- Total                          98.5   90.6   85.9  100.0    0.0  100.0   92.4
-
- blib/lib/Template/Sandbox.pm   97.5   90.7   85.9  100.0  100.0   99.8   94.6
- ...mplate/Sandbox/Library.pm  100.0  100.0   36.4  100.0  100.0    0.2   93.1
+ blib/lib/Template/Sandbox.pm   98.5   90.7   86.4  100.0  100.0   99.8   95.1
+ ...mplate/Sandbox/Library.pm  100.0  100.0   36.4  100.0  100.0    0.1   93.1
  ...andbox/NumberFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
  ...andbox/StringFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
- Total                          97.7   91.0   83.5  100.0  100.0  100.0   94.6
+ Total                          98.6   91.0   83.9  100.0  100.0  100.0   95.1
  ---------------------------- ------ ------ ------ ------ ------ ------ ------
 
 You can generate this report within the distribution's directory by:
@@ -4565,6 +4744,28 @@ are occassionally incorrect in a number of situations including
 (but not limited to) define replacement and a couple of other as-yet
 unknown factors pending investigation.  This will be fixed in a later
 version.
+
+=item Quoted-':>' inside expressions still terminate the statement
+
+Because of the implementation of the parsing of statements,
+the next C<< :> >> after an opening C<< <: >> will I<always> be consided
+the closing delimeter, even if it's enclosed within quotes within an
+expression.
+
+Whilst this is almost certainly a bug (in that it doesn't do what you
+clearly intended it to do), it's unlikely to be resolved since it simplifies
+and optimizes the parsing phase very considerably, and as a work-around
+you can use:
+
+  <: expr ':' . '>' :>
+
+to achieve the intended (but broken):
+
+  <: expr ':>' :>
+
+As a side-note, because of compile-time I<constant-folding>, the resulting
+compiled template is no different than that which would have been achieved by
+the intended code.
 
 =item C<cr> special variable instead of C<\n>.
 
@@ -4626,6 +4827,17 @@ Then in subclauses.html:
 Quite what it will do in this situation is undefined and subject
 to a number of variables depending on the exact circumstances, what
 I<is> certain is that it won't reliabily be behaving I<correctly>.
+
+=item "Short-circuit" operators only partially constant-folded
+
+As detailed in L</"Template Program Optimization">, operators that
+"short circuit" down the left-hand side are only subject to
+constant-folding optimizations if both sides of the operator are
+constants, even in situations where the "short circuit" would make
+the RHS irrelevent at run-time.
+
+This is only a (probably minor) performance bug, and in no way
+impacts correct behaviour.
 
 =back
 
