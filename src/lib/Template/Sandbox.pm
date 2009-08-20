@@ -772,7 +772,8 @@ sub initialize
     {
         foreach my $arg ( @{$param->{ library }} )
         {
-            eval "use $arg->[ 0 ];";
+#  Neccessary?
+#            eval "use $arg->[ 0 ];";
             $arg->[ 0 ]->export_template_functions( $self,
                 @{$arg}[ 1..$#{$arg} ] );
         }
@@ -4516,6 +4517,12 @@ Currently there are 925 tests within the distribution, with coverage:
  ---------------------------- ------ ------ ------ ------ ------ ------ ------
  blib/lib/Template/Sandbox.pm   98.5   90.6   85.9  100.0    0.0  100.0   92.4
  Total                          98.5   90.6   85.9  100.0    0.0  100.0   92.4
+
+ blib/lib/Template/Sandbox.pm   97.5   90.7   85.9  100.0  100.0   99.8   94.6
+ ...mplate/Sandbox/Library.pm  100.0  100.0   36.4  100.0  100.0    0.2   93.1
+ ...andbox/NumberFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
+ ...andbox/StringFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
+ Total                          97.7   91.0   83.5  100.0  100.0  100.0   94.6
  ---------------------------- ------ ------ ------ ------ ------ ------ ------
 
 You can generate this report within the distribution's directory by:
