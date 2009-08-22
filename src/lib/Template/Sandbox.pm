@@ -25,8 +25,6 @@ use Scalar::Util;
 use Storable;
 use Time::HiRes;
 
-my $total_time = 0;
-
 #my ( @function_table );
 
 #  Array indices.
@@ -1187,6 +1185,11 @@ sub add_var
 {
     my ( $self, $var, $value ) = @_;
 
+    $self->caller_error(
+        "Bad argument to add_var, expected top-level variable name, got: $var"
+        )
+        if $var =~ /\./;
+
     $self->{ vars }->{ $var } = $value;
 }
 
@@ -1196,6 +1199,11 @@ sub add_vars
 
     foreach my $var ( keys( %{$vars} ) )
     {
+        $self->caller_error(
+            "Bad var in add_vars, expected top-level variable name, got: $var"
+            )
+            if $var =~ /\./;
+
         $self->{ vars }->{ $var } = $vars->{ $var };
     }
 }
@@ -2753,15 +2761,9 @@ sub run
     my ( $lineno, $ret, @var_stack, @for_stack, $run_start, $total_instr,
         $program, $last_instr, $special_values );
 
-#CORE::warn( "Template::run( $self, $input )" );
-
-    $run_start = Time::HiRes::time();
-
 #$ret = ' ' x 80_000;
     $ret = '';
     $lineno = 0;
-
-#print "Content-type: text/html\n\n<PRE>" . Data::Dumper::Dumper( $self->_var_value( 'param' ) ) . "from " . Data::Dumper::Dumper( $input ) . "</PRE>";
 
     @var_stack = ( $self->{ vars } );
     @for_stack = ();
@@ -2997,43 +2999,6 @@ sub run
     delete $self->{ input };
     delete $self->{ phase };
 
-    my $tt = Time::HiRes::time() - $run_start;
-#  TODO:  belongs in application wrapper
-#    if( $self->{ format } eq 'html' )
-#    {
-#        $ret .= "<!-- $self->{ filename } run-time: " .
-#            sprintf( "%7.3f", $tt * 1000 ) . "ms, " .
-#            "instr run: $total_instr, prog length: " .
-#            ( $last_instr + 1 ) . " instr -->\n";
-#    }
-    $total_time += $tt;
-
-#  TODO:  belongs in application wrapper
-#if( $self->{ format } eq 'html' )
-#{
-#foreach my $prof ( qw/instr expr func op/ )
-#{
-#$ret .= "<!-- $self->{ filename } ${prof}count:\n";
-#foreach ( sort { $self->{ "${prof}count" }->{ $b } <=> $self->{ "${prof}count" }->{ $a } } keys( %{$self->{ "${prof}count" }} ) )
-#{
-#  $ret .= sprintf( "%12s => %d\n", $_, $self->{ "${prof}count" }->{ $_ } );
-#}
-#$ret .= "-->\n";
-#$ret .= "<!-- $self->{ filename } ${prof}profile:\n";
-#foreach ( sort { $self->{ "${prof}profile" }->{ $b } <=> $self->{ "${prof}profile" }->{ $a } } keys( %{$self->{ "${prof}profile" }} ) )
-#{
-#  $ret .= sprintf( "%12s => %7.3fms (%7.3fms)\n", $_, $self->{ "${prof}profile" }->{ $_ } * 1000, $self->{ "${prof}profile" }->{ $_ } * 1000 / $self->{ "${prof}count" }->{ $_ } );
-#}
-#$ret .= "-->\n";
-#delete $self->{ "${prof}count" };
-#delete $self->{ "${prof}profile" };
-#}
-##my $tmp = $self->dumpable_template();
-###my $tmp = $self->decompile_template();
-##$tmp =~ s/-->/-- >/g;
-##$ret .= "<!-- $self->{ filename } dump:\n$tmp-->\n";
-#}
-
     return( \$ret );
 }
 
@@ -3191,9 +3156,6 @@ sub dumpable_template
 #
 #    return( $ret );
 #}
-
-sub clear_total_time { $total_time = 0; }
-sub total_time { return( $total_time ); }
 
 1;
 
@@ -3471,55 +3433,201 @@ why it couldn't.
 The options you can pass in are covered in the L</"OPTIONS"> section
 above.
 
-=item C<< $template->register_template_function >>
+=item B<< $template->register_template_function( >> I<$function_definition> B<)>
 
-=item C<< $template->add_template_function  >>
+=item B<< $template->add_template_function( >> I<$function_definition> B<)>
 
-=item C<< $template->unregister_template_function >>
+=item B<< $template->unregister_template_function( >> I<$function_name> B<)>
 
-=item C<< $template->delete_template_function  >>
+=item B<< $template->delete_template_function( >> I<$function_name> B<)>
 
-=item C<< $template->register_template_syntax >>
+This lets you register a custom template function to the new template
+instance, or to unregister one so that it is no longer available.
 
-=item C<< $template->add_template_syntax >>
+See the section L</"Custom Template Functions"> for more details.
 
-=item C<< $template->unregister_template_syntax  >>
+=item B<< $template->register_template_syntax( >> B<)>
 
-=item C<< $template->delete_template_syntax >>
+=item B<< $template->add_template_syntax( >> B<)>
 
-=item C<< $template->get_valid_singular_constructor_param >>
+=item B<< $template->unregister_template_syntax( >> B<)>
 
-=item C<< $template->get_valid_multiple_constructor_param >>
+=item B<< $template->delete_template_syntax( >> B<)>
 
-=item C<< $template->initialize >>
+This lets you register a custom template syntax to the new template
+instance, or to unregister one so that it is no longer available.
 
-=item C<< $template->set_template_root >>
+See the section L</"Custom Template Syntax"> for more details.
 
-=item C<< $template->get_template_candidates >>
+=item B<< $template->get_valid_singular_constructor_param() >>
 
-=item C<< $template->get_include_candidates >>
+=item B<< $template->get_valid_multiple_constructor_param() >>
 
-=item C<< $template->get_additional_dependencies >>
+=item B<< $template->initialize( >> I<%options> B<)>
 
-=item C<< $template->set_template >>
+These three methods are used by the template constructor to
+determine valid parameters and initialize from them.
 
-=item C<< $template->set_template_string >>
+Each is detailed further in L</"SUBCLASSING Template::Sandbox">.
 
-=item C<< $template->add_var >>
+=item B<< $template->get_template_candidates( >> I<$filename>, I<$dir> B<)>
 
-=item C<< $template->add_vars >>
+=item B<< $template->get_include_candidates( >> I<$filename>, I<$dir> B<)>
 
-=item C<< $template->merge_var >>
+These two methods govern how to find a template file from the
+requested filename.
 
-=item C<< $template->merge_vars >>
+Each is detailed further in L</"SUBCLASSING Template::Sandbox">.
 
-=item C<< $template->run >>
+=item B<< $template->get_additional_dependencies() >>
 
-=item C<< $template->clear_total_time >>
+Returns if there are any additional file dependencies beyond the usual
+for the current template.
 
-=item C<< $template->total_time >>
+This method is detailed further in L</"SUBCLASSING Template::Sandbox">.
 
-=item C<< $template->dumpable_template >>
+=item B<< $template->set_template_root( >> I<$dir> B<)>
+
+Sets the C<template_root> to C<$dir>, as per the C<template_root>
+constructor option.
+
+=item B<< $template->set_template( >> I<$filename> B<)>
+
+=item B<< $template->set_template( >> I<$filename>, I<$defines> B<)>
+
+Loads and compiles the template in I<$filename>, optionally setting
+I<compile defines> from the hashref I<$defines>.
+
+=item B<< $template->set_template_string( >> I<$template> B<)>
+
+=item B<< $template->set_template_string( >> I<$template>, I<$defines> B<)>
+
+Loads and compiles the template given in the string I<$template>, optionally
+setting I<compile defines> from the hashref I<$defines>.
+
+=item B<< $template->add_var( >> I<$name>, I<$value> B<)>
+
+Sets the I<template variable> named I<$name> to have value I<$value>.
+
+Note that you can only add "top-level variables", that is you can do
+the first of these but not the second:
+
+  $template->add_var( 'user' => { profile => $profile, }, );  #  Works.
+  $template->add_var( 'user.profile' => $profile );           #  Wrong!
+
+=item B<< $template->add_vars( >> I<$vars> B<)>
+
+Adds a I<template variable> with name and value from each key and value
+of the hashref I<$vars>.
+
+Like C<< $template->add_var() >>, this can only add top-level variables.
+
+=item B<< $template->merge_var( >> I<$name>, I<$value> B<)>
+
+Merges the contents of I<$value> into the I<template variable> named
+I<$name>.
+
+How the merge is performed depends on the nature of of I<$value>:
+
+=over
+
+=item I<$value> is a scalar
+
+If the named I<template variable> does not already exist, it is set to
+I<$value>. If the variable already has a value, it remains unchanged.
+
+=item I<$value> is an arrayref
+
+If I<$value> is an arrayref, then the contents of the arrayref are pushed
+onto the arrayref contents of the I<template variable>, or assigned if
+no arrayref already exists.
+
+=item I<$value> is a hashref
+
+Each key and value of I<$value> is merged with each key and value of
+the hashref in the named I<template variable>.
+
+=back
+
+If this seems a little complicated, think of it that arrayref variables
+get appended to, and hashrefs "have any missing entries filled in":
+
+  #  In one part of your app:
+  $template->merge_var(
+      stylesheets => [ 'login_widget.css' ],
+      );
+
+  #  Then elsewhere:
+  $template->merge_var(
+      stylesheets => [ 'search.css', 'advertising.css' ],
+      );
+
+  #  Contents of 'stylesheets' is now:
+  [ 'login_widget.css', 'search.css', 'advertising.css' ]
+  
+
+  #  Or a more complicated (and contrived) example:
+  $template->merge_var(
+      userprefs => {
+          private_messages => {
+              message_order      => 'oldest-first',
+              delete_when_viewed => 1,
+              fave_tags          => [ 'music', 'video' ],
+              },
+          },
+      );
+  $template->merge_var(
+      userprefs => {
+          private_messages => {
+              delete_when_viewed => 0,
+              friends_only       => 1,
+              fave_tags          => [ 'computers' ],
+              },
+          },
+          public_messages  => {
+              message_order      => 'newest-first',
+          },
+      );
+
+  #  Contents of 'userprefs' is now:
+  {
+      private_messages =>
+          {
+              message_order      => 'oldest-first',
+              #  This already existed and remained unchanged.
+              delete_when_viewed => 1,
+              #  This didn't exist and was added.
+              friends_only       => 1,
+              #  This already existed and was appended to.
+              fave_tags          => [ 'music', 'video', 'computers' ],
+          },
+      #  This didn't exist and was added.
+      public_messages  =>
+          {
+              message_order      => 'newest-first',
+          },
+  }
+
+=item B<< $template->merge_vars( >> I<$vars> B<)>
+
+For each key and value in the hashref I<$vars>, perform a
+C<< $template->merge_var() >> with that key and value.
+
+=item B<< $template->run() >>
+
+Runs the template, returning a reference to the output.
+
+C<< $template->run() >> will I<always> return a valid string reference,
+or raise an exception trying: even if no output is produced a reference
+to the empty string will be returned, so the following is safe (if ugly):
+
+  print ${$template->run()};
+
+=item B<< $template->dumpable_template() >>
+
+Returns a somewhat human-readable dump of the compiled template program,
+this probably isn't very useful unless you're me, or doing me the kindness
+of debugging something for me. :)
 
 =back
 
@@ -3575,7 +3683,7 @@ This is further detailed in the  L</"INCLUDES"> section.
 
 =item B<< <: # >> I<< comment >> B<< :> >>
 
-The C<#> statement is removed entirely from the tempplate output (it's
+The C<#> statement is removed entirely from the template output (it's
 entirely removed from the compiled template in fact), behaving like a
 normal perl comment.
 
@@ -3587,8 +3695,9 @@ developing the template:
   written the session.user object.
   <: # endif :>
 
-Note that only the C<if> and C<endif> statements are commented out,
-the template content between them will still be in the template.
+Note that, in this example, only the C<if> and C<endif> statements are
+commented out, the template content between them will still be in the
+template.
 
 =back
 
@@ -3755,11 +3864,15 @@ Generally this will mean it will just "Do What I Want".
 Function calls may be made within an expression using the, familiar to
 many languages, syntax of C<< functionname( arg1, arg2, ... ) >>. For
 convenience and familiarity to Perl developers you can also use C<< => >>
-as an argument separator, ie the following two are equivilent, but the
-second may be more readable:
+as an argument separator, ie the following are equivilent, but the
+second two may be more readable:
 
   <: expr url( 'q', 'bald-headed eagle', 'lang', 'en' ) :>
   <: expr url( 'q' => 'bald-headed eagle', 'lang' => 'en' ) :>
+  <: expr url(
+    'q'    => 'bald-headed eagle',
+    'lang' => 'en',
+    ) :>
 
 Note however that unlike Perl, C<< => >> does not auto-quote barewords
 on its left-hand side:
@@ -3781,7 +3894,7 @@ template variables, you must explicitly grant access to more than this
 if you wish to do so.
 
 Ideally L<Template::Sandbox> would ship with no functions enabled, and
-so these functions may be moved to the optional functions module in a
+so these functions may be moved to the optional functions libraries in a
 future release if possible.
 
 The three default functions are:
@@ -3815,7 +3928,7 @@ implement the __size__ special variable.  (See L</"SPECIAL VARIABLES">.)
 =item C<defined( arg )>
 
 Takes a single argument and returns 1 or 0 to indicate whether the
-pvalue was defined or not.
+value was defined or not.
 
 This function is required by the test suite at a stage before the function
 registration has been confirmed as working, as such will remain for at
@@ -4598,7 +4711,7 @@ or the like, but it wasn't. Although the structure of a compiled expression
 I<is> one, just to be contrary.
 
 If you're curious about the structure, you can make use of the
-C<< $template->_dumpable_template() >> method to produce a somewhat
+C<< $template->dumpable_template() >> method to produce a somewhat
 literal dump of the compiled program with a degree of human-readability
 (for I<strange> humans anyway).
 
