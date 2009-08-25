@@ -173,10 +173,15 @@ SKIP: foreach my $cache_type ( sort( keys( %caches ) ) )
             is( $compile_counter, $previous_compile_counter,
                 "compile count unchanged by run after $test_desc" );
 
-#  TODO:       test cache stale-hit
+#  TODO: test cache stale-hit
+#  TODO: test cache miss from cached tempate but differing defines.
+#  TODO: test cache of included template
+#  TODO: test cache miss of includes of same template with differing defines.
         }
     }
 
     #  Cleanup in case I add persistent caches to the test later.
     $cache->Clear();
 }
+
+#  TODO: test set_cache().

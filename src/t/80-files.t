@@ -294,3 +294,6 @@ SKIP:
 
 #  TODO: if-constructs that are partly in one file and another.
 #  TODO: for-loops that are partly in one file and another.
+#  TODO: assigns to new var inside include looked at outside
+#  TODO: assigns to existing var inside include looked at outside
+#  TODO: assigns to var outside include looked at inside
