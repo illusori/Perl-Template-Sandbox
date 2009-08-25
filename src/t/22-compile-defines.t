@@ -7,15 +7,15 @@ use Test::More;
 
 use Template::Sandbox;
 
-plan tests => 9;
+plan tests => 8;
 
 my ( $template, $syntax );
 
 #
 #  1: Define with value.
-$syntax = '${PAGE}';
+$syntax = '${ADEFINE}';
 $template = Template::Sandbox->new();
-$template->set_template_string( $syntax );
+$template->set_template_string( $syntax, { ADEFINE => 'string' } );
 is( ${$template->run()},
     "string",
     'define with value' );
@@ -40,30 +40,31 @@ is( ${$template->run()},
 
 #
 #  4: Recursive define.
-#  FILENAME gets set to "string://$template_string", ie: contains ${FILENAME}
-$syntax = '${FILENAME}';
+$syntax = '${RECURSIVE}';
 $template = Template::Sandbox->new();
-$template->set_template_string( $syntax );
+$template->set_template_string( $syntax,
+    { RECURSIVE => 'this is ${RECURSIVE}' } );
 is( ${$template->run()},
-    "string:///[recursive define 'FILENAME']",
+    "this is [recursive define 'RECURSIVE']",
     'recursive define' );
 
 #
 #  5: Quoted define with value.
-$syntax = '${\'PAGE\'}';
+$syntax = '${\'ADEFINE\'}';
 $template = Template::Sandbox->new();
-$template->set_template_string( $syntax );
+$template->set_template_string( $syntax, { ADEFINE => 'string' } );
 is( ${$template->run()},
     "'string'",
     'quoted define with value' );
 
 #
 #  6: Quoted define with quotes in value.
-$syntax = '${\'FILENAME\'}';
+$syntax = '${\'ADEFINE\'}';
 $template = Template::Sandbox->new();
-$template->set_template_string( $syntax );
+$template->set_template_string( $syntax,
+    { ADEFINE => "string with 'quotes' in it" } );
 is( ${$template->run()},
-    q('string:///${\\'FILENAME\\'}'),
+    q('string with \\'quotes\\' in it'),
     'quoted define with quotes in value' );
 
 #
@@ -83,15 +84,3 @@ $template->set_template_string( $syntax );
 is( ${$template->run()},
     q('[undefined preprocessor define \\'NOSUCHDEFINE\\']'),
     'quoted missing define' );
-
-#
-#  9: set_template_string() with passed defines.
-$syntax = '${DEFINEA}';
-$template = Template::Sandbox->new();
-$template->set_template_string( $syntax,
-    {
-        DEFINEA => 'some value or other',
-    } );
-is( ${$template->run()},
-    "some value or other",
-    'defines set in set_template_string()' );
