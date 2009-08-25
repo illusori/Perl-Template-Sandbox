@@ -781,7 +781,7 @@ sub initialize
         $param->{ ignore_module_dependencies }
         if exists $param->{ ignore_module_dependencies };
 
-    $self->{ cache }  = $param->{ cache }
+    $self->set_cache( $param->{ cache } )
         if exists $param->{ cache };
     $self->set_template_root( $param->{ template_root } )
         if exists $param->{ template_root };
@@ -790,6 +790,30 @@ sub initialize
 
     $self->{ vars }   = {};
     $self->{ debug }  = {};
+}
+
+sub set_cache
+{
+    my ( $self, $cache ) = @_;
+
+    $self->{ cache } = $cache;
+    delete $self->{ cache_uses_extended_set };
+}
+
+sub _cache_uses_extended_set
+{
+    my ( $self ) = @_;
+    my ( $cache );
+
+    return( $self->{ cache_uses_extended_set } )
+        if exists $self->{ cache_uses_extended_set };
+
+    $cache = $self->{ cache };
+    return( $self->{ cache_uses_extended_set } = 1 )
+        if $cache->isa( 'Cache::CacheFactory' ) or
+           ( $cache->can( 'set_takes_named_param' ) and
+             $cache->set_takes_named_param() );
+    return( $self->{ cache_uses_extended_set } = 0 );
 }
 
 sub set_template_root
@@ -879,26 +903,12 @@ sub set_template
 
     #  Shallow copy is safe, keys/values should only be scalars.
     $defines = $defines ? { %{$defines} } : {};
-
-    #  PAGE is the leaf filename of what they _asked_ for.
-    #  TODO:  probably should use File::Spec.
-    if( $filename =~ /^(.*)\/(.*?)$/ )
-    {
-        $defines->{ PAGE } = $2;
-    }
-    else
-    {
-        $defines->{ PAGE } = $filename;
-    }
-
-    $self->{ filename }    = $self->find_template( $filename, Cwd::cwd() );
-    delete $self->{ template };
-    $defines->{ FILENAME } = $self->{ filename };
-    #  TODO:  probably should use File::Spec.
-    $defines->{ DIR }      = ( $filename =~ /^(.*)\/(.*?)$/ ) ? $1 : '';
-
     $self->{ defines }        = $defines;
     $self->{ special_values } = {};
+    delete $self->{ template };
+
+    $self->{ filename }    = $self->find_template( $filename, Cwd::cwd() );
+    $defines->{ FILENAME } = $self->{ filename };
 
     if( $self->{ cache } )
     {
@@ -946,9 +956,8 @@ sub set_template
             #  If they're using Cache::CacheFactory we can make use of
             #  the dependencies and created at timestamps, if not we
             #  fall back on the basic Cache::Cache style API.
-#  TODO: unroll the isa() to initialize
 #  TODO: wrap compat cache behaviour with our own dependencies checking.
-            if( $self->{ cache }->isa( 'Cache::CacheFactory' ) )
+            if( $self->_cache_uses_extended_set() )
             {
                 $self->{ cache }->set(
                     key          => $cache_key,
@@ -978,18 +987,13 @@ sub set_template_string
 
     #  Shallow copy is safe, keys/values should only be scalars.
     $defines = $defines ? { %{$defines} } : {};
-
-    #  Hmmm.
-    $defines->{ PAGE } = 'string';
+    $self->{ defines }        = $defines;
+    $self->{ special_values } = {};
+    delete $self->{ template };
 
     #  Erk.  Better way of making this cacheable surely?
     $self->{ filename }    = 'string:///' . $template_string;
-    delete $self->{ template };
     $defines->{ FILENAME } = $self->{ filename };
-    $defines->{ DIR }      = Cwd::cwd();
-
-    $self->{ defines }        = $defines;
-    $self->{ special_values } = {};
 
     if( $self->{ cache } )
     {
@@ -1037,9 +1041,8 @@ sub set_template_string
             #  If they're using Cache::CacheFactory we can make use of
             #  the dependencies and created at timestamps, if not we
             #  fall back on the basic Cache::Cache style API.
-#  TODO: unroll the isa() to initialize
 #  TODO: wrap compat cache behaviour with our own dependencies checking.
-            if( $self->{ cache }->isa( 'Cache::CacheFactory' ) )
+            if( $self->_cache_uses_extended_set() )
             {
                 $self->{ cache }->set(
                     key          => $cache_key,
@@ -1196,14 +1199,16 @@ sub add_var
 sub add_vars
 {
     my ( $self, $vars ) = @_;
+    my ( @bad_vars );
+
+    $self->caller_error(
+        "Bad var(s) in add_vars, expected top-level variable name, got: " .
+        join( ', ', @bad_vars )
+        )
+        if @bad_vars = grep /\./, keys( %{$vars} );
 
     foreach my $var ( keys( %{$vars} ) )
     {
-        $self->caller_error(
-            "Bad var in add_vars, expected top-level variable name, got: $var"
-            )
-            if $var =~ /\./;
-
         $self->{ vars }->{ $var } = $vars->{ $var };
     }
 }
@@ -1277,39 +1282,48 @@ sub _escape_string
 sub _define_value
 {
     my ( $self, $defines, $define, $default, $quote ) = @_;
+    my ( $value );
 
 #$self->warning( "replacing define '$define'" );
-
     if( $self->{ seen_defines }->{ $define }++ )
     {
-        $define = "[recursive define '$define']";
+        $value = "[recursive define '$define']";
     }
     elsif( defined( $defines->{ $define } ) )
     {
-        $define = $defines->{ $define };
+        $value = $defines->{ $define };
     }
     elsif( defined( $default ) )
     {
-        $define = $default;
+        $value = $default;
     }
     else
     {
-        $define = "[undefined preprocessor define '$define']";
+        $value = "[undefined preprocessor define '$define']";
     }
 
-    $define = "'" . $self->_escape_string( $define ) . "'" if $quote;
+    $value = $self->_replace_defines( $value, $defines );
+    $self->{ seen_defines }->{ $define }--;
 
-    return( $define );
+    $value = "'" . $self->_escape_string( $value ) . "'" if $quote;
+
+    return( $value );
 }
 
 sub _replace_defines
 {
     my ( $self, $template_content, $defines ) = @_;
+    my ( $top );
 
     #  Replace any preprocessor defines.
-    local $self->{ seen_defines } = {};
+    unless( $self->{ seen_defines } )
+    {
+        $self->{ seen_defines } = {};
+        $top = 1;
+    }
     1 while $template_content =~ s/\$\{('?)([A-Z0-9_]+)(?::([^\}]*))?\1\}/
         $self->_define_value( $defines, $2, $3, $1 )/gex;
+    delete $self->{ seen_defines } if $top;
 
     return( $template_content );
 }
@@ -1725,22 +1739,19 @@ sub _compile_template
                 #  exists or not.
                 if( $filename = $args->{ filename } )
                 {
+                    my ( $current_dir );
+
                     delete $args->{ filename };
 
-                    $filename = $self->find_include( $filename,
-                        $define_stack[ 0 ]->{ DIR } );
+                    ( $current_dir ) =
+                        ( $define_stack[ 0 ]->{ FILENAME } =~ /^(.*)\// );
 
-                    if( $includes{ $filename } )
-                    {
-                        $self->error(
-                            "recursive include of $filename" );
-                    }
+                    %defines = %{$define_stack[ 0 ]};
+
+                    $self->{ defines } = \%defines;
+                    unshift @define_stack, \%defines;
 
                     #  Parse out any defines.
-                    %defines = (
-                        FILENAME => $filename,
-                        DIR      => ( $filename =~ /^(.*)\/(.*?)$/ ) ? $1 : '',
-                        );
                     foreach my $key (
                         grep { $_ eq uc( $_ ) } keys( %{$args} ) )
                     {
@@ -1752,12 +1763,12 @@ sub _compile_template
                         keys( %{$args} ) };
                     $args = 0 unless scalar( keys( %{$args} ) );
 
-                    foreach my $define ( keys( %{$define_stack[ 0 ]} ) )
-                    {
-                        $defines{ $define } = $define_stack[ 0 ]->{ $define }
-                            unless exists $defines{ $define };
-                    }
-                    unshift @define_stack, { %defines };
+                    $filename = $self->find_include( $filename, $current_dir );
+
+                    $self->error( "recursive include of $filename" )
+                        if $includes{ $filename };
+
+                    $defines{ FILENAME } = $filename;
 
                     $includes{ $filename } = 1;
                     $inc_template =
@@ -1795,6 +1806,7 @@ sub _compile_template
                 $last = shift @pos_stack;
                 delete $includes{ $files[ $last->[ 0 ] ] };
                 shift @define_stack;
+                $self->{ defines } = $define_stack[ 0 ];
                 push @compiled,
                     [ CONTEXT_POP, $pos ];
                 next;  #  So we don't update pos with this faux-token.
@@ -3199,7 +3211,7 @@ Template::Sandbox - templates safely sandboxed from your application.
    <: if user :>
    <p>Welcome back, <: expr user.name :>.</p>
    <: else :>
-   <p>Welcome,</p>
+   <p>Welcome.</p>
    <: endif :>
    <p>Recent Transactions:</p>
    <table>
@@ -3485,6 +3497,11 @@ Returns if there are any additional file dependencies beyond the usual
 for the current template.
 
 This method is detailed further in L</"SUBCLASSING Template::Sandbox">.
+
+=item B<< $template->set_cache( >> I<$cache> B<)>
+
+Sets the C<cache> to C<$cache>, as per the C<cache>
+constructor option.
 
 =item B<< $template->set_template_root( >> I<$dir> B<)>
 
@@ -4180,6 +4197,58 @@ any files it, in turn, includes. See L</"SCOPED VARIABLES"> for more
 details.
 
 =head1 SCOPED VARIABLES
+
+All I<template variables> added via C<< $template->add_var() >>,
+C<< $template->add_vars() >>, C<< $template->merge_var() >>, and
+C<< $template->merge_vars() >> have global scope within the template
+instance the method was called on, however it is also possible to create
+variables that have a shorter scope than the entire template instance,
+these are called I<scoped variables>.
+
+There are three different ways of creating I<scoped variables>: the
+I<iterator variable> of a C<for> loop, variables created via the
+I<assign operator>, and variables set during an C<include> statement.
+
+I<Scoped variables> behave much like Perl variaables created with C<local>:
+they exist for the remainder of the current context and and are visible
+to all inner contexts.
+
+New contexts are created on entering a C<for> loop (unless one is deemed
+uneccessary, see L</"Template Program Optimizations">), and on entering
+a file via an C<include> statement.
+
+Note that the behaviour of the I<assign operator> differs from C<for> and
+C<include> in that it only creates a I<scoped variable> in the current
+context if no I<scoped variable> already exists in a visible context.
+
+That is, C<for> and C<include> create I<scoped variables> that mask any
+previous I<scoped variable> or I<template variable> of the same name,
+whereas the I<assign operator> will set any previous I<scoped variable>
+(but not I<template variable>) or create a new one.
+
+This difference in behaviour allows you to produce something akin to
+subroutine calls with a dirty hack by assigning a variable to a dummy
+value to create it in the outer scope then setting it within an include
+with a 'return value':
+
+  In an outer template:
+  <: expr returnval = 0 :>
+  <: include faux_subroutine.html a=12 b=44 :>
+  <: expr returnval :>
+
+  Contents of faux_subroutine.html:
+  <: expr returnval = a + b :>
+
+  When the outer template is run, it produces:
+  56
+
+While this behaviour can be useful in some situations, it's probably
+a sign that you need to create a new I<template function> to do the
+heavy lifting for you.
+
+There is currently a subtle bug with assigns to new I<template variables>
+within I<context-folded> loops persisting for longer than expected, this
+is detailed further in L</"KNOWN ISSUES AND BUGS">.
 
 =head1 SPECIAL VARIABLES
 
@@ -5135,6 +5204,21 @@ the RHS irrelevent at run-time.
 
 This is only a (probably minor) performance bug, and in no way
 impacts correct behaviour.
+
+=item Assigns within context-folded for loops persist
+
+There's a subtly inconsistent behaviour between C<for> loops that
+have been context-folded and those that haven't, if there is an
+assign to a new I<template variable> within the loop, in the
+non-folded case, the new variable will exist only for the duration
+of the loops, whereas the context-folded case will cause the new
+variable to exist until the end of the outer context the C<for>
+loop was called from.
+
+This is a bug, and the correct behaviour would be too not constant-fold
+loop if there's an assign inside, however this is difficult to test until
+constant-folding of loops is performed during the compile-phase
+optimization rather than at runtime.
 
 =back
 
