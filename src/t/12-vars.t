@@ -7,7 +7,13 @@ use Test::More;
 
 use Template::Sandbox;
 
-plan tests => 16;
+BEGIN
+{
+    eval "use Test::Exception";
+    plan skip_all => "Test::Exception required for testing template vars" if @_;
+}
+
+plan tests => 18;
 
 my ( $template );
 
@@ -85,3 +91,24 @@ is_deeply( $template->_var_value( 'g' ),
 is_deeply( $template->_var_value( 'h' ),
     { 'like unto' => 'that which hath never before been seen' },
     'merge_vars new hashref' );
+
+#
+#  17: error on add_var of non-top-level var
+throws_ok
+    {
+        $template->add_var( 'broken.var' => 'this is broken' );
+    }
+    qr/Template post-initialization error: Bad argument to add_var, expected top-level variable name, got: broken\.var at /,
+    'error on add_var of non-top-level var';
+
+#
+#  18: error on add_vars of non-top-level var
+throws_ok
+    {
+        $template->add_vars( {
+            ok           => 'this is ok',,
+            'broken.var' => 'index index index',
+            } );
+    }
+    qr/Template post-initialization error: Bad var\(s\) in add_vars, expected top-level variable name, got: broken\.var at /,
+    'error on add_vars of non-top-level var';
