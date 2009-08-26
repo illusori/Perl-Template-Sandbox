@@ -4209,7 +4209,7 @@ There are three different ways of creating I<scoped variables>: the
 I<iterator variable> of a C<for> loop, variables created via the
 I<assign operator>, and variables set during an C<include> statement.
 
-I<Scoped variables> behave much like Perl variaables created with C<local>:
+I<Scoped variables> behave much like Perl variables created with C<local>:
 they exist for the remainder of the current context and and are visible
 to all inner contexts.
 
@@ -4645,6 +4645,83 @@ possible to disable I<zero-width folding>.
 
 =head1 CACHING
 
+Like most template systems L<Template::Sandbox> is heavily optimized for
+speed when a template is run, sometimes at the expense of the time taken
+to compile the template in the first place: currently compilation of a
+template is approximately an order of magnitude slower than running it.
+(This is a very rough metric based on my practical experience for a typical
+template: large or small numbers of loops at runtime will sway this figure
+back and forth - they only get compiled once, but run many times.)
+
+This strategy assumes that you'll be using some form of persistent caching
+mechanism, and L<Template::Sandbox> provides an in-built caching mechanic
+to make this easier for you.
+
+Via the C<cache> constructor param or the
+C<< $template->set_cache( $cache ) >> method, you can supply a cache
+object of your own choosing and configuration for L<Template::Sandbox>
+to use.
+
+The only restriction on the cache object is that it must conform to
+either the L<Cache::Cache> API or the extended C<set()> API of
+L<Cache::CacheFactory>.
+
+If C<< $cache->set_takes_named_param() >> exists and returns true, or
+C<< $cache->isa( 'Cache::CacheFactory' ) >> returns true then the extended
+(named-parameter) version of C<< $cache->set() >> will be used, this will
+pass the dependencies of the template as a named parameter C<dependencies>
+which is suitable for use for the 'lastmodified' expiry policy of
+L<Cache::CacheFactory>.
+
+If the extended version of C<set()> is I<not> used, then I<no dependencies
+checking will be performed at all>. This may change in future versions
+with L<Template::Sandbox> running its own dependencies checking to support
+caches that don't perform their own.
+
+By default L<Template::Sandbox> includes all superclasses of the template
+as dependencies for the template, since if the template module changes it
+may invalidate the compiled template. In a production environment this can
+impose a performance hit as these relatively unchanging module files are
+C<stat()>ed on each template request. To avoid this penalty you can prevent
+the modules from being placed on the dependencies list by setting the
+C<ignore_module_dependencies> constructor option to a true value.
+If you do this, you should manually flush any cached templates when you
+upgrade the template modules.
+
+Some example code snippets for caching:
+
+  #  Using Cache::Cache's Cache::FileCache.pm
+  $cache    = Cache::FileCache->new();
+  $template = Template::Sandbox->new(
+      cache    => $cache,
+      template => 'profile.html',
+      );
+  print ${$template->run()};
+
+  $cache    = Cache::FileCache->new(
+      namespace  => 'mytemplates',
+      cache_root => '/var/tmp/template_cache',
+      );
+  $template = Template::Sandbox->new();
+  $template->set_cache( $cache );
+  $template->set_template( 'profile.html' );
+  print ${$template->run()};
+
+  #  Using Cache::CacheFactory
+  $cache = Cache::CacheFactory->new(
+      namespace => 'mytemplates',
+      storage   => 'file',
+      validity  => 'lastmodified',
+      );
+  $template = Template::Sandbox->new(
+      cache    => $cache,
+      template => 'profile.html',
+      );
+  print ${$template->run()};
+
+See L<Cache::Cache> and L<Cache::CacheFactory> for further details on
+configuring cache objects.
+
 =head1 SUBCLASSING Template::Sandbox
 
 =head2 Useful methods to override when subclassing
@@ -4988,13 +5065,133 @@ Template function array indices:
 
 =head1 PERFORMANCE CONSIDERATIONS AND METRICS
 
+This section aims to give you a few hints and tips on making your
+templates run efficiently.
+
+Not all of these points apply in all situations, and many are fairly
+marginal unless you're running a large and complicated template, these
+are merely presented as starting points and explanations that may
+(or may not) prove helpful.
+
 =head2 Defines vs Scoped Variables
+
+Where possible you should consider using I<compile defines> instead of
+I<scoped variables> when you're doing an C<include> of another template,
+in fact you should consider using I<compile defines> over any kind of
+variable if possible, but it's particularly relevent to includes:
+
+=over
+
+=item Pros of Defines over Scoped Variables
+
+=over
+
+=item Compile-time vs run-time
+
+I<Compile defines> are inserted into the template as literal values
+as the template is compiled, whereas variables are evaluated at
+run-time each time they are used.
+
+=item Allows context-folding of the included template
+
+Whenever you pass I<scoped variables> to an include a new context
+must be pushed onto the context stack, if no I<scoped variables>
+are passed then the C<include> is a candidate for I<context-folding>
+optimizations.
+
+Since the context stack must be traversed for every variable access,
+this makes access of any variables within your included template
+(or anything it includes) faster.
+
+=item Allows constant-folding of expressions using the define
+
+Since I<compile defines> are placed in the template as constant
+values it make them candidates for I<constant-folding> optimizations,
+this can't happen with a variable as there's no way of telling that
+it is unchanging between runs.
+
+=back
+
+=item Cons of Defines over Scoped Variables
+
+=over
+
+=item Defines contribute to the cache key, causing more cache misses
+
+When a template is cached it needs to have a cache key that reflects
+all parameters that contributed to the compiled content, that includes
+the names and values of all defines.
+
+This means that a template with any defines with differing values from
+previous compiles will cause a cache-miss, meaning an expensive compile
+phase and more entries overall in your cache. This may or may not be
+a downside for you.
+
+=back
+
+=back
 
 =head2 Method Calls
 
+Method calls within template expressions are potentially much more
+inefficient than I<template functions>, where possible you should
+consider creating a I<template function> instead.
+
+Here's a list of things to consider in the evaluation of a method
+call within a template, that prevent it from being as fast:
+
+=over
+
+=item Evaluation of object
+
+The object to call the method on is stored within a I<template variable>
+which must be evaluated.
+
+Since pretty much all I<template variables> originate in your perl code,
+it's highly likely that a I<custom template function> could determine the
+object directly from your application's data-structure eliminating the
+I<template varaible> access.
+
+The same applies to any arguments to the method that originate in
+I<template variables>.
+
+=item Object is inconstant
+
+Because the object to call the method on is within a I<template variable>,
+it cannot be determined at compile-time (even if it does turn out to be a
+constant value), meaning that methods cannot have I<constant-folding>
+optimizations applied to them, unlike I<template functions>.
+
+=item Every method call is actually two method calls
+
+Each call to a method within a template actually translates to two
+method calls on the object in perl: the first is the call to
+C<valid_template_method( $method_name )> to determine if the method
+call should be permitted.
+
+The cost of calling this permission method may be insignificant (depending
+on your implementation), but if the method to be called is also insignificant
+in cost it may, proportionaly speaking, be a large overhead.
+
+=back
+
 =head2 Constant-folding vs Operators
 
+Operators only have I<constant-folding> applied if both sub-expressions
+are constants, even if lazy-evaluation would prevent a right-hand
+expression from being evaluated.
+
+This is detailed further in L</"KNOWN ISSUES AND BUGS">.
+
+=head2 Metrics
+
+No performance metrics currently, they'll appear at this point in the
+docs when they make their appearance in a future release.
+
 =head1 PRIVATE AND SEMI-PRIVATE METHODS
+
+You're unlikely to ever need to call these methods directly, or to
+change them when subclassing L<Template::Sandbox>.
 
 =over
 
