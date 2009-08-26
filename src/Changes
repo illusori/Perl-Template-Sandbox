@@ -1,0 +1,8 @@
+Revision history for Template::Sandbox
+
+1.00    Version released at 2009-08-26-13:18.
+        Version started at  2009-08-??.
+        Initial CPAN release.
+        Split from internal Application::Template module.
+        Added tests.
+        Added documentation.
