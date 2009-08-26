@@ -479,7 +479,7 @@ BEGIN
 {
     use Exporter   ();
 
-    $Template::Sandbox::VERSION     = '1.00';
+    $Template::Sandbox::VERSION     = '1.00_01';
     @Template::Sandbox::ISA         = qw( Exporter );
 
     @Template::Sandbox::EXPORT      = qw();
@@ -3175,7 +3175,7 @@ __END__
 
 =head1 NAME
 
-Template::Sandbox - templates safely sandboxed from your application.
+Template::Sandbox - Templates safely sandboxed from your application.
 
 =head1 SYNOPSIS
 
