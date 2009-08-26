@@ -27,7 +27,6 @@ my $build = Module::Build->new(
         'Log::Any'         => 0,
         'Scalar::Util'     => 0,
         'Storable'         => 1.014,
-        'Time::HiRes'      => 0,
         },
     recommends => {
         'Cache::CacheFactory' => 1.08,
