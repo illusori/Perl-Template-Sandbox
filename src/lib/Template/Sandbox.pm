@@ -3258,7 +3258,7 @@ optional features: caching compiled templates, includes, flow control,
 embedded expressions, cascading template candidates, and useful
 debugging information in case of errors.
 
-Furthermore L<Template::Sandbox> is designed to be subclassable should
+Furthermore, L<Template::Sandbox> is designed to be subclassable should
 you wish to customize or extend other of its features.
 
 =head1 IMPORTANT CONCEPTS AND TERMINOLOGY
@@ -5255,16 +5255,16 @@ template position added.
 
 =head1 QUALITY ASSURANCE AND TEST METRICS
 
-Currently there are 925 tests within the distribution, with coverage:
+Currently there are 1089 tests within the distribution, with coverage:
 
  ---------------------------- ------ ------ ------ ------ ------ ------ ------
  File                           stmt   bran   cond    sub    pod   time  total
  ---------------------------- ------ ------ ------ ------ ------ ------ ------
- blib/lib/Template/Sandbox.pm   98.5   90.7   86.4  100.0  100.0   99.8   95.1
- ...mplate/Sandbox/Library.pm  100.0  100.0   36.4  100.0  100.0    0.1   93.1
+ blib/lib/Template/Sandbox.pm   98.5   90.7   85.4  100.0  100.0   99.7   95.0
+ ...mplate/Sandbox/Library.pm  100.0  100.0   36.4  100.0  100.0    0.2   93.1
  ...andbox/NumberFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
  ...andbox/StringFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
- Total                          98.6   91.0   83.9  100.0  100.0  100.0   95.1
+ Total                          98.6   91.1   83.0  100.0  100.0  100.0   95.0
  ---------------------------- ------ ------ ------ ------ ------ ------ ------
 
 You can generate this report within the distribution's directory by:
