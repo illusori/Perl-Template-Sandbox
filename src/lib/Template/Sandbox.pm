@@ -5421,7 +5421,9 @@ optimization rather than at runtime.
 
 =head1 SEE ALSO
 
-L<Template::Sandbox::Library>, L<Cache::CacheFactory>, L<Cache::Cache>
+L<Template::Sandbox::Library>, L<Template::Sandbox::NumberFunctions>,
+L<Template::Sandbox::StringFunctions>,
+L<Cache::CacheFactory>, L<Cache::Cache>
 
 =head1 SUPPORT
 
