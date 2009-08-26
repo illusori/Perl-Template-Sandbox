@@ -73,7 +73,7 @@ __END__
 
 =head1 NAME
 
-Template::Sandbox::NumberFunctions - basic string functions library for Template::Sandbox
+Template::Sandbox::NumberFunctions - Basic number functions library for Template::Sandbox.
 
 =head1 SYNOPSIS
 

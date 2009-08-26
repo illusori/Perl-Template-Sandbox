@@ -32,7 +32,7 @@ __END__
 
 =head1 NAME
 
-Template::Sandbox::StringFunctions - basic string functions library for Template::Sandbox
+Template::Sandbox::StringFunctions - Basic string functions library for Template::Sandbox.
 
 =head1 SYNOPSIS
 
