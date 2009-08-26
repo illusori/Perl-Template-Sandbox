@@ -4691,7 +4691,7 @@ C<< <: url :> >> statements:
       $args ||= {};
 
       #  Craft url with given param.
-      return( $self->{ input }->url( {
+      return( $app->input()->url( {
           map
           {
               $_ => $self->_eval_expression( $args->{ $_ }, 1 )
