@@ -23,7 +23,7 @@ use IO::File;
 use Log::Any;
 use Scalar::Util;
 use Storable;
-use Time::HiRes;
+#use Time::HiRes;
 
 #my ( @function_table );
 
@@ -40,16 +40,14 @@ sub LINE_ARG()   { 2; }
 
 #  Instruction opcodes.
 sub LITERAL()      { 0; }
-#sub FORM()         { 1; }  #  TODO: remove and shuffle up
-#sub URL()          { 2; }  #  TODO: remove and shuffle up
-sub DEBUG()        { 3; }
-sub EXPR()         { 4; }
-sub JUMP()         { 5; }
-sub JUMP_IF()      { 6; }
-sub FOR()          { 7; }
-sub END_FOR()      { 8; }
-sub CONTEXT_PUSH() { 9; }
-sub CONTEXT_POP()  { 10; }
+sub DEBUG()        { 1; }
+sub EXPR()         { 2; }
+sub JUMP()         { 3; }
+sub JUMP_IF()      { 4; }
+sub FOR()          { 5; }
+sub END_FOR()      { 6; }
+sub CONTEXT_PUSH() { 7; }
+sub CONTEXT_POP()  { 8; }
 
 #  Starting point for opcodes for locally registered syntaxes.
 sub LOCAL_SYNTAX() { 1_000_000; }
@@ -3458,13 +3456,13 @@ instance, or to unregister one so that it is no longer available.
 
 See the section L</"Custom Template Functions"> for more details.
 
-=item B<< $template->register_template_syntax( >> B<)>
+=item B<< $template->register_template_syntax( >> I<$syntax_definition> B<)>
 
-=item B<< $template->add_template_syntax( >> B<)>
+=item B<< $template->add_template_syntax( >> I<$syntax_definition> B<)>
 
-=item B<< $template->unregister_template_syntax( >> B<)>
+=item B<< $template->unregister_template_syntax( >> I<$syntax_token> B<)>
 
-=item B<< $template->delete_template_syntax( >> B<)>
+=item B<< $template->delete_template_syntax( >> I<$syntax_token> B<)>
 
 This lets you register a custom template syntax to the new template
 instance, or to unregister one so that it is no longer available.
@@ -4599,6 +4597,115 @@ a need for it with:
 
 This API is incomplete and subject to change, nevertheless the current
 state-of-play is documented here in case you need to make use of it.
+
+It's possible to add new single-statement template keywords to be
+compiled into the template and run by your own custom callbacks.
+
+You do this with either the C<template_syntax> constructor option
+or the C<< $template->register_template_syntax() >> method:
+
+  $template = Template::Sandbox->new(
+      template_syntax => [
+          yarr => {
+              compile => sub { [] },
+              run     => sub { 'Yarr!' },
+              },
+          ],
+      );
+
+  $template->register_template_syntax(
+      lubber => {
+          compile => sub { [] },
+          run     => sub { 'Ye scurvy landlubber!' },
+          },
+      );
+
+  $template->set_template_string( "<: yarr :> <: lubber :>\n" );
+  print ${$template->run()};
+
+  Yarr! Ye scurvy landlubber!
+
+As can be seen, two arguments are passed, the first is the name of the
+token to be added as valid template syntax, the second is a hash of options
+for that syntax.
+
+Currently the only options allowed for the syntax are C<compile> for the
+I<compile callback> and C<run> for the I<run callback>.
+
+The I<compile callback> is called as the syntax is compiled, it's passed
+the template object, the token being compiled, the position data-structure
+marking the current position in the template and a hashref of the named
+args set in the statement being compiled.
+
+It should return a value that will be passed as an argument to the
+I<run callback> when the compiled statement is executed, or C<undef>
+to indicate that the statement should be dropped entirely from the
+compiled template.
+
+The I<run callback> is called whenever the compiled statement is run,
+being passed the template object, the token being run and the compiled
+arguments. (Note that the position is I<not> passed to the run callback.)
+
+It should return a string containing the content to be inserted into the
+template output, or C<undef> if no output is to be produced.
+
+Here's an example from a L<Template::Sandbox> subclass to allow
+C<< <: url :> >> statements:
+
+  sub initialize
+  {
+      my ( $self, $param ) = @_;
+
+      $self->register_template_syntax(
+          'url' =>
+              {
+                  compile => \&compile_url,
+                  run     => \&run_url,
+              }
+              );
+
+      $self->SUPER::initialize( $param );
+  }
+
+  sub compile_url
+  {
+      #  This isn't a method despite similar args.
+      my ( $self, $token, $pos, $args ) = @_;
+
+      $args = {
+          map
+          {
+              $_ => $self->_compile_expression( $args->{ $_ } )
+          }
+          keys( %{$args} ) };
+      $args = 0 unless scalar( keys( %{$args} ) );
+
+      return( $args );
+  }
+
+  sub run_url
+  {
+      #  This isn't a method despite similar args.
+      my ( $self, $token, $args ) = @_;
+
+      $args ||= {};
+
+      #  Craft url with given param.
+      return( $self->{ input }->url( {
+          map
+          {
+              $_ => $self->_eval_expression( $args->{ $_ }, 1 )
+          }
+          keys( %{$args} ) },
+          1 ) );
+  }
+
+Currently I<custom template syntaxes> don't really let you achieve
+anything you couldn't achieve with a I<custom template function>,
+and you potentially miss out on fringe benefits like I<constant-folding>
+optimizations. You also can't produce block-style statements like
+C<if> or C<for> constructs, both of these situations may change in
+future releases.
 
 =head1 ZERO-WIDTH FOLDING
 
