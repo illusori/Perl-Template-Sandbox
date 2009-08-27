@@ -211,17 +211,19 @@ on subclasses of it.
 
 =over
 
-=item C<< import() >>
+=item B<< import() >>
 
 Called automatically by C<use>, this will take the L<Exporter> style
 arguments to C<use> and build a list of functions to register with
-L<Template::Sandbox> at the class level (global to all templates.)
+L<Template::Sandbox> at the class level (global to all templates):
+
+  use Template::Sandbox::NumberFunctions qw/:all/;
 
 You probably shouldn't call import() directly yourself, you should
 only access it via C<use>, if you want to manually export template
 functions, use C<< export_template_functions() >> detailed below.
 
-=item C<< $library->export_template_functions( $template, @names )  >>
+=item B<< $library->export_template_functions( >> I<$template>, I<@names> B<)>
 
 Exports the given names into C<$template> as template functions.
 
@@ -248,7 +250,18 @@ Or for all functions, except trig functions, but including atan:
       $template, qw/:all !:trig atan/,
       );
 
-=item C<< $library->set_library_functions( %functions ) >>
+For convenience this method can automatically be called as part of
+your template constructor with the C<library> option, for example
+the previous example could be written as:
+
+  use Template::Sandbox;
+  use MyApp::TemplateMaths;
+
+  $template = Template::Sandbox->new(
+      library => [ 'MyApp::TemplateMaths' => qw/:all !:trig atan/ ],
+      );
+
+=item B<< $library->set_library_functions( >> I<%functions> B<)>
 
 Sets the I<template functions> that this library knows about, overwriting
 any previous definitions and removing any existing functions from the
@@ -261,7 +274,7 @@ L<Template::Sandbox>.
 
 See the L</"SYNOPSIS"> for some examples.
 
-=item C<< $library->set_library_tags( %tags ) >>
+=item B<< $library->set_library_tags( >> I<%tags> B<)>
 
 Sets the export tags that this library knows about, overwriting
 any previous definitions and removing any existing tags from the
@@ -286,7 +299,8 @@ already.
 
 =head1 SEE ALSO
 
-L<Template::Sandbox>
+L<Template::Sandbox>, L<Template::Sandbox::StringFunctions>,
+L<Template::Sandbox::NumberFunctions>
 
 =head1 SUPPORT
 
