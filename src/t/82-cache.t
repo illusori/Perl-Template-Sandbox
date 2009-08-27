@@ -24,13 +24,13 @@ BEGIN
         );
 
     eval "use Cache::MemoryCache";
-    $caches{ 'Cache::Cache' } = Cache::MemoryCache->new() unless @_;    
+    $caches{ 'Cache::Cache' } = eval "Cache::MemoryCache->new()" unless @_;    
 
     eval "use Cache::CacheFactory";
-    $caches{ 'Cache::CacheFactory' } = Cache::CacheFactory->new(
-        storage  => 'memory',
+    $caches{ 'Cache::CacheFactory' } = eval "Cache::CacheFactory->new(
+        storage  => 'file',
         validity => 'lastmodified',
-        ) unless @_;
+        )" unless @_;
 
     plan skip_all =>
         "Cache::MemoryCache or Cache::CacheFactory required for cache tests"
@@ -45,8 +45,6 @@ $option_variants   = 2;
 $template_variants = 2;
 $tests_per_cache   =
     $tests_per_variant * $option_variants * $template_variants;
-
-plan tests => $tests_per_cache * scalar( keys( %caches ) );
 
 my ( $template, $template_root, $expected, $compile_counter,
      $template_file, $template_string );
@@ -71,6 +69,8 @@ my ( $template, $template_root, $expected, $compile_counter,
     $template_root = $candidate_dirs[ 0 ];
 }
 
+plan tests => $tests_per_cache * scalar( keys( %caches ) );
+
 $compile_counter = 0;
 
 #  Trickery here, we make a function that appears to be constant
@@ -85,11 +85,13 @@ Template::Sandbox->register_template_function(
 $template_file   = File::Spec->catfile( $template_root, 'cache.txt' );
 $template_string = "<: expr compile_counter() :>\n";
 
-SKIP: foreach my $cache_type ( sort( keys( %caches ) ) )
+foreach my $cache_type ( sort( keys( %caches ) ) )
 {
     my ( $cache );
 
-    plan skip => "No $cache_type available", $tests_per_cache
+SKIP:
+{
+    skip "No $cache_type available", $tests_per_cache
         unless $caches{ $cache_type };
 
     $cache = $caches{ $cache_type };
@@ -138,7 +140,7 @@ SKIP: foreach my $cache_type ( sort( keys( %caches ) ) )
                     };
             }
 
-            $cache->Clear();
+            $cache->clear();
 
             #
             #  1-3: test cache miss
@@ -180,8 +182,9 @@ SKIP: foreach my $cache_type ( sort( keys( %caches ) ) )
         }
     }
 
-    #  Cleanup in case I add persistent caches to the test later.
-    $cache->Clear();
+    #  Cleanup to remove persistent caches.
+    $cache->clear();
+}
 }
 
 #  TODO: test set_cache().
