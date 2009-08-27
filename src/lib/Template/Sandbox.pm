@@ -3345,11 +3345,13 @@ New L<Template::Sandbox> objects can be created with the constructor
 C<< Template::Sandbox->new( %options ) >>, using any (or none) of the
 options below.
 
-=head2 B<template> => I<template filename>
+=over
+
+=item B<template> => I<template filename>
 
 Specifies the template file to be loaded.
 
-=head2 B<template_root> => I<directory>
+=item B<template_root> => I<directory>
 
 Sets the base directory to which template filenames will be relative.
 
@@ -3357,14 +3359,14 @@ This is not enforced as a restriction, if someone wants to traverse
 outside the C<template_root> with C<..> or other mechanics, they can
 do so.
 
-=head2 B<logger> => I<logging object>
+=item B<logger> => I<logging object>
 
 Sets the object to be used for logging purposes, by default L<Log::Any>
 is invoked via C<< Log::Any->get_logger() >>, if you're passing some
 other form of logger, you're responsible for ensuring it meets the
 same API as provided by L<Log::Any>.
 
-=head2 B<cache> => I<cache object>
+=item B<cache> => I<cache object>
 
 Sets the template to search the given cache for compiled templates
 rather than compiling them anew.
@@ -3378,7 +3380,7 @@ you will need to ensure cache freshness via your own mechanisms.
 
 See the section L</"Caching"> for further discussion.
 
-=head2 B<ignore_module_dependencies> => I<1> | I<0>
+=item B<ignore_module_dependencies> => I<1> | I<0>
 
 When using L<Cache::CacheFactory> for caching, a list of dependencies
 for the cached version of the template is produced, this includes
@@ -3395,14 +3397,14 @@ have made, if they contain functional changes.
 
 See the section L</"Caching"> for further discussion.
 
-=head2 B<template_function> => I<template function definition>
+=item B<template_function> => I<template function definition>
 
 This lets you register a custom template function to the new template
 instance.
 
 See the section L</"Custom Template Functions"> for more details.
 
-=head2 B<copy_global_functions> => I<1> | I<0>
+=item B<copy_global_functions> => I<1> | I<0>
 
 On initializing the new template object, if this option is set to a true
 value, all template functions added at the class level will be copied as
@@ -3412,7 +3414,7 @@ available to templates run by this instance.
 
 See the section L</"Custom Template Functions"> for more details.
 
-=head2 B<library> => [ I<$library> => I<@import> ]
+=item B<library> => [ I<$library> => I<@import> ]
 
 This will import the list of I<template functions> or I<import tags>
 listed in I<@import> from the template function libary I<$library>.
@@ -3423,18 +3425,20 @@ This is equivilent to calling:
 
 For more details see L<Template::Sandbox::Library>.
 
-=head2 B<template_syntax> => I<template syntax definition>
+=item B<template_syntax> => I<template syntax definition>
 
 This lets you register a custom template syntax to the new template
 instance.
 
 See the section L</"Custom Template Syntaxes"> for more details.
 
+=back
+
 =head1 PUBLIC METHODS
 
 =over
 
-=item C<< $template->new( %options ); >>
+=item B<< $template->new( >> I<< %options >> B<)>
 
 This is the constructor for L<Template::Sandbox>, it will return
 a newly constructed template object, or throw an exception explaining
@@ -3451,7 +3455,7 @@ above.
 
 =item B<< $template->delete_template_function( >> I<$function_name> B<)>
 
-This lets you register a custom template function to the new template
+These methods let you register a custom template function to the new template
 instance, or to unregister one so that it is no longer available.
 
 See the section L</"Custom Template Functions"> for more details.
@@ -3464,7 +3468,7 @@ See the section L</"Custom Template Functions"> for more details.
 
 =item B<< $template->delete_template_syntax( >> I<$syntax_token> B<)>
 
-This lets you register a custom template syntax to the new template
+These methods let you register a custom template syntax to the new template
 instance, or to unregister one so that it is no longer available.
 
 See the section L</"Custom Template Syntax"> for more details.
@@ -3648,7 +3652,7 @@ of debugging something for me. :)
 
 =head1 TEMPLATE SYNTAX
 
-With the exception of compile defines (detailed below in
+With the exception of I<compile defines> (detailed below in
 L</"Compile Defines">), all L<Template::Sandbox> syntax is written
 as statements enclosed within
 C<< <: >> and C<< :> >> symbols, for example:
@@ -3777,14 +3781,14 @@ When indexing arrays it's customary to use square-brackets too:
 
   results[ 12 ]
 
-Variables usually refer to template variables added via
+Variables usually refer to I<template variables> added via
 C<< $template->add_var() >> or C<< $template->add_vars() >>, however
 in some circumstances they can refer to locally-scoped variables set
 with the assign operator or include variables, both detailed in the
 L</"Operators"> and L</"INCLUDES> sections and further under
 L</"SCOPED VARIABLES">.
 
-There are a number of "special variables" that exist as indexes of
+There are a number of I<special variables> that exist as indexes of
 other variables, you can recognise these as they are surrounded by
 double-underscores, some examples:
 
@@ -3826,6 +3830,10 @@ operator as a whole, the right-hand expression will never be evaluated.
 
 These operators compare two strings as in the equivilent Perl operators.
 
+Although grouped together in this document for convenience, the
+precedence of the string comparison operaters is interleaved with the
+matching numeric comparison operators: lt, <, gt, >, le, <=, etc.
+
 =item Numeric comparison operators (<, >, <=, >=, ==, !=, <=>)
 
 These operators compare two numbers as in the equivilent Perl operators,
@@ -3834,9 +3842,9 @@ operators in Javascript, then you will cause warnings.
 
 =item Assignment operator (=)
 
-This creates a new variable local to the current scope and assigns the
-right-hand side value to it. If there is already a variable local to
-the current scope, it will assign to that instead.
+This assigns the right-hand value to the I<scoped variable> on the
+left-hand side. If there is no I<scoped variable> of that name visible
+in the current scope, a new one will be created within the current scope.
 
 See L</"SCOPED VARIABLES"> for more details on this behaviour.
 
@@ -3860,7 +3868,7 @@ However, if the assign is at the top level of an C<< expr >> statement,
 it will return the empty string '', so that it leaves your template output
 unmarked, ie:
 
-  x<: expr a = 5 :>x
+  x<: expr a = 4 + 1 :>x
 
 produces:
 
@@ -3874,11 +3882,26 @@ Generally this will mean it will just "Do What I Want".
 
 =back
 
+=head2 Brackets
+
+If you're combining several expressions and are uncertain of the
+operator precedence, or simply want to make things clearer, you can
+use C<< () >> round-brackets in the traditional way to group expressions
+in order of execution.
+
+Some examples:
+
+  <: expr ( 1 + 2 ) * 5 :>
+  <: expr config.baseurl . '?page=' . ( param.page + 1 ) :>
+
 =head2 Functions
 
 Function calls may be made within an expression using the, familiar to
-many languages, syntax of C<< functionname( arg1, arg2, ... ) >>. For
-convenience and familiarity to Perl developers you can also use C<< => >>
+many languages, syntax of:
+
+  functionname( arg1, arg2, ... )
+
+For convenience and familiarity to Perl developers you can also use C<< => >>
 as an argument separator, ie the following are equivilent, but the
 second two may be more readable:
 
@@ -3903,7 +3926,7 @@ instead they are calls to functions that have been registered as I<template
 functions> with the current template.
 
 By default only three functions are registered, those three are needed
-for internal behaviour of certain special variables and for the test
+for internal behaviour of certain I<special variables> and for the test
 suite, it is part of L<Template::Sandbox>>'s core philosophy that, like
 template variables, you must explicitly grant access to more than this
 if you wish to do so.
@@ -3954,12 +3977,10 @@ least the initial few releases to simplify CPAN smoke-testing feedback.
 =head2 Methods
 
 Methods on objects can be used within an expression, using a syntax familar
-to either Javascript or Perl developers, for example:
+to either Javascript or Perl developers, for example both of these are
+identical:
 
   message.mark_as_read( 1 )
-
-or:
-
   message->mark_as_read( 1 )
 
 In either case the C<< mark_as_read >> method will be called on the object
@@ -3981,18 +4002,6 @@ implications in using them detailed in
 L</"PERFORMANCE CONSIDERATIONS AND METRICS">, however it may be that
 someone will find them invaluable. Maybe.
 
-=head2 Brackets
-
-If you're combining several expressions and are uncertain of the
-operator precedence, or simply want to make things clearer, you can
-use C<< () >> round-brackets in the traditional way to group expressions
-in order of execution.
-
-Some examples:
-
-  <: expr ( 1 + 2 ) * 5 :>
-  <: expr config.baseurl . '?page=' . ( param.page + 1 ) :>
-
 =head1 CONDITIONAL STATEMENTS
 
 L<Template::Sandbox> provides C<< if >>, C<< else if >>, C<< else >>,
@@ -4001,9 +4010,9 @@ constructs to conditionally choose between different sections of
 template content, much like if statements in other languages choose
 between blocks of statements.
 
-Any valid expression (see L</"EXPRESSIONS">) may be used as the condition,
-the true/false value of the result is all that the conditional statement
-cares about.
+Any valid I<template expression> (see L</"EXPRESSIONS">) may be used as
+the condition, the true/false value of the result is all that the
+conditional statement cares about.
 
 Each condtional construct is made up of an opening C<if> or C<unless>
 statement, optionally one or more C<else if> or C<else unless> statements,
@@ -4069,14 +4078,14 @@ anything after it wouldn't make sense...
 
 This marks the end of the conditional construct, whatever form of C<if> or
 C<unless> you have used to open your construct, you can use any of the above
-close it, for clarity you may wish to use a matching one though.
+close it, for clarity you may wish to use a matching one.
 
 =back
 
 =head1 LOOPS
 
 L<Template::Sandbox> provides a "loop" mechanism like the foreach statement
-of Perl, it creates and sets a locally scoped variable, sets it to the
+of Perl, it creates and sets a locally I<scoped variable>, sets it to the
 first value in a set of values and executes the contents of the loop,
 sets the loop variable to the next in the set of values and repeats,
 until there are no more entries in the set to loop through, whereupon
@@ -4092,7 +4101,7 @@ Each C<for> loop takes the following format:
   loop content
   <: end for :>
 
-The iterator is created as a scoped variable (see L</"SCOPED VARIABLES">)
+The iterator is created as a I<scoped variable> (see L</"SCOPED VARIABLES">)
 within a new scope context, so it will mask the existence of any
 previous variable with that name within the scope of the loop.
 
@@ -4278,7 +4287,7 @@ be considered a bug, or at the least a missing feature, so it may
 become unneccessarily in a future release. The use of C<cr> will still
 be supported beyond that point for backwards-compatibility.
 
-=item C<.__size__>
+=item C<var.__size__>
 
 Provides the size of the indexed variable, as provided by the C<size()>
 template function.
@@ -4293,12 +4302,12 @@ This may be subject to change in future releases.
 
 =back
 
-The following special variables are only available on the iterator
-variable of a C<for> or C<foreach> loop.
+The following I<special variables> are only available as indices of
+the I<loop variable> of a C<for> or C<foreach> loop.
 
 =over
 
-=item C<.__value__>
+=item C<iterator.__value__>
 
 Available only when iterating across a hash, this provides access
 to the value corresponding to the key the iterator is currently
@@ -4315,7 +4324,7 @@ is more convenient and also executes faster:
   <: expr x.__value__ :>
   <: end for :>
 
-=item C<.__counter__>
+=item C<iterator.__counter__>
 
 Gives the numeric count of which iteration of the loop is currently
 being run, numbered from zero:
@@ -4326,9 +4335,9 @@ being run, numbered from zero:
 
 Will give output "0", "1", "2", "3", "4", etc.
 
-=item C<.__even__>
+=item C<iterator.__even__>
 
-=item C<.__odd__>
+=item C<iterator.__odd__>
 
 Set to true or false if this an odd or even iteration of the loop.
 
@@ -4340,54 +4349,60 @@ in tables for legibility:
 Note that since this is derived from C<__counter__>, which starts at zero,
 this means that the first iterator is C<__even__> and not C<__odd__>.
 
-=item C<.__first__>
+=item C<iterator.__first__>
 
 Set to true if this is the first iteration of the loop, or false
 subsequently.
 
-=item C<.__last__>
+=item C<iterator.__last__>
 
 Set to true if this is the last iteration of the loop, or false otherwise.
 
-=item C<.__inner__>
+=item C<iterator.__inner__>
 
 Set to true if this is neither the first nor the last iteration of the
 loop, otherwise false.
 
-=item C<.__prev__>
+=item C<iterator.__prev__>
 
-=item C<.__next__>
+=item C<iterator.__next__>
 
 Give you convenient access to the previous and next values that the iterator
 was (or will be) set to, or undef if you are at the start or end of the loop
 respectively.
 
-Note that in the case of iterating across a hash, the special variable
-C<.__value__> will B<not> be set for either of these special variables,
-so you cannot use C<iterator.__prev__.__value__> to get to the previous
-value in the hash.
+Note that in none of the loop I<special variables> will be set for
+the contents of C<iterator.__prev__> or C<iterator.__next__>, ie these
+C<expr> statements will error:
+
+  <: for entry in myhash :>
+  <: # These will error :>
+  <: expr entry.__prev__.__value__ :>
+  <: expr entry.__next__.__prev__ :>
+  <: end for :>
 
 =back
 
 =head1 COMPILE DEFINES
 
 I<Compile defines> are a special type of variable that get replaced at
-compile-time (to be picky, they actually get replaced at template-read
-time, before compilation is done.)
+compile-time. (To be picky, they actually get replaced as the template
+is read, before compilation begins.)
 
 This means two things: 1) they're constant and cannot change during
 repeated runs of the same compiled template, or within a single run;
 2) they can contain anything you like, including fragments of template
 statements rather that just values to use in an I<expression>.
 
-You can set I<Compile defines> at two stages, either when you call
+You can set I<compile defines> at two stages, either when you call
 C<< $template->set_template( $filename, $defines ) >> (or
-C<set_template_string>), or as parameters to an C<include> statement
-(for more details look at L</"INCLUDES">).
+C<set_template_string>), or as parameters to an C<include> statement.
+(For more details look at L</"INCLUDES">.)
 
 However you set them, a I<compile define> is a symbol consisting of
 an entirely UPPERCASE name, that will be used for literal replacement
-within the template contents being read.
+within the template contents being read. You may also use underscores
+(C<_>) and numbers within a define name.
 
 The template is scanned looking for constructs of the form:
 
@@ -4404,24 +4419,38 @@ If the token being replaced has the form C<${NAME}>, the contents
 of the define will be substituted verbatim into the source of the
 template being read.
 
+For example:
+
+  $contents = q/Welcome to ${PAGEOWNER}'s Home Page!/;
+
+  $template->set_template_string( $contents,
+      {
+          PAGEOWNER => 'Joe',
+      } );
+  print ${$template->run()};
+  # Produces: Welcome to Joe's Home Page!
+
 =head2 Compile Define Defaults
 
 If the token has form C<${NAME:default}>, then if there is a
 I<compile define> with name C<NAME> with a defined value, that
 will be used for substitution, otherwise the value of C<default>
-will be used, ie:
+will be used.
 
-  Welcome to ${PAGEOWNER:Fred}'s Home Page!
+For example:
 
-would produce one of:
+  $contents = q/Welcome to ${PAGEOWNER:Fred}'s Home Page!/;
 
-  Welcome to Joe's Home Page!
+  $template->set_template_string( $contents,
+      {
+          PAGEOWNER => 'Joe',
+      } );
+  print ${$template->run()};
+  # Produces: Welcome to Joe's Home Page!
 
-or:
-
-  Welcome to Fred's Home Page!
-
-when run with PAGEOWNER defined as 'Joe' or undefined.
+  $template->set_template_string( $contents );
+  print ${$template->run()};
+  # Produces: Welcome to Fred's Home Page!
 
 =head2 Quoted Compile Defines
 
@@ -4447,21 +4476,26 @@ and in the main navigation template for your side you want to do:
   <: include alert_header.html
      MOTD="We're currently experiencing some service disruptions, please bear with us" :>
 
-This will be replaced and produce the safe output of:
+This will be replaced and produce the (safe) template source of:
 
   <p class="alert">
   <: expr html_escape( 'We\'re currently experiencing some service disruptions, please bear with us' ) :>
   </p>
 
-Without the C<${'MOTD'}> quoting mechanism, you would need to manually escape
-the contents of C<MOTD> when you set it within the C<include> statement.
-While this may be possible, it's inconvenient and the sort of thing you're
-likely to accidentally forget to do.
+Without the C<${'MOTD'}> quoting mechanism, the quote in "We're" would be
+unescaped and terminate the string, causig a syntax error within the template.
+
+You could manually escape the contents of C<MOTD> when you set it within
+the C<include> statement, but while this may be possible, it's
+inconvenient and the sort of thing you're likely to accidentally forget
+to do. It also leads to error messages at the point where the I<define>
+is used rather than where the I<define> is set, which can be a pain to
+track back up to in complicated template structures.
 
 =head1 CUSTOM TEMPLATE FUNCTIONS
 
 In order to use any functions beyond the basic ones within your template
-you will need to register them as a custom template function.
+you will need to register them as a I<custom template function>.
 
 This can be done either with the C<template_function> constructor option
 or the C<< $template->register_template_function() >> method.
@@ -4519,13 +4553,17 @@ Now within your templates you can do the following sorts of things:
 
 =head2 Function Sugar
 
+These helper functions can be exported into your namespace with:
+
+  use Template::Sandbox qw/:function_sugar/;
+
 =over
 
 =item inconstant
 
 Indicates that the function returns a value that is not constant even
 if the arguments are constant, and that the function should not be
-subject to constant-folding optimizations at compile time. You should
+subject to I<constant-folding> optimizations at compile time. You should
 also use this if the function returns a constant value for constant
 input but has an important side-effect that must happen each call.
 
@@ -5257,7 +5295,7 @@ which must be evaluated.
 Since pretty much all I<template variables> originate in your perl code,
 it's highly likely that a I<custom template function> could determine the
 object directly from your application's data-structure eliminating the
-I<template varaible> access.
+I<template variable> access.
 
 The same applies to any arguments to the method that originate in
 I<template variables>.
@@ -5425,8 +5463,9 @@ expression.
 Whilst this is almost certainly a bug (in that it doesn't do what you
 clearly intended it to do), it's unlikely to be resolved since it simplifies
 and optimizes the parsing phase very considerably, and as a work-around
-you can use:
+you can use either of the following:
 
+  <: expr ':\>' :>
   <: expr ':' . '>' :>
 
 to achieve the intended (but broken):
