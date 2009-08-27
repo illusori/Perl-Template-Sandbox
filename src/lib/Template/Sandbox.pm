@@ -3417,7 +3417,7 @@ See the section L</"Custom Template Functions"> for more details.
 =item B<library> => [ I<$library> => I<@import> ]
 
 This will import the list of I<template functions> or I<import tags>
-listed in I<@import> from the template function libary I<$library>.
+listed in I<@import> from the template function library I<$library>.
 
 This is equivilent to calling:
 
@@ -4197,11 +4197,17 @@ an include, except the parameter name is lower-case:
 
   <: include login_widget.html user=session.user :>
 
-This would set the C<user> template variable to be equal to the value of
-the C<session.user> template variable when control enters into the included
+This would set the C<user> I<scoped variable> to be equal to the value of
+the C<session.user> I<template variable> when control enters into the included
 file at runtime. This variable would be local to the included file and
 any files it, in turn, includes. See L</"SCOPED VARIABLES"> for more
 details.
+
+You can use any valid I<template expression> to assign to the
+I<scoped variable>, but if the expression contains spaces you must
+double-quote (C<"">) the expression:
+
+  <: include image_with_border.html img="user.id . '/' . gallery.id" :>
 
 =head1 SCOPED VARIABLES
 
@@ -4483,7 +4489,8 @@ This will be replaced and produce the (safe) template source of:
   </p>
 
 Without the C<${'MOTD'}> quoting mechanism, the quote in "We're" would be
-unescaped and terminate the string, causig a syntax error within the template.
+unescaped and terminate the string, causing a syntax error within the
+template.
 
 You could manually escape the contents of C<MOTD> when you set it within
 the C<include> statement, but while this may be possible, it's
@@ -4876,7 +4883,7 @@ L<Template::Sandbox>.
 
 =over
 
-=item $template->initialize( I<%param> )
+=item B<< $template->initialize( >> I<%param> B<)>
 
 Called as part of the constructor, C<initialize()> is designed for
 you to override, with the hash C<%param> passed as a single argument
@@ -4892,9 +4899,9 @@ the I<exact> values that were passed to the constructor, this
 means that if you pass an arrayref of values I<as> the param,
 you will end up with an arrayref of arrayref(s).
 
-=item $template->get_valid_singular_constructor_param()
+=item B<< $template->get_valid_singular_constructor_param() >>
 
-=item $template->get_valid_multiple_constructor_param()
+=item B<< $template->get_valid_multiple_constructor_param() >>
 
 Override these methods to add to the list of valid parameters that
 the constructor should accept and place into the C<%param> passed
@@ -4907,9 +4914,9 @@ The I<singular> version lists those param that may only be supplied
 once to the constructor, and I<multiple> for those that may be
 supplied more than once.
 
-=item $template->get_template_candidates( I<$filename>, I<$dir> )
+=item B<< $template->get_template_candidates( >> I<$filename>, I<$dir> B<)>
 
-=item $template->get_include_candidates( I<$filename>, I<$dir> )
+=item B<< $template->get_include_candidates( >> I<$filename>, I<$dir> B<)>
 
 These two methods are called to find the candidate filenames to
 check for existence before loading a template.
@@ -4934,7 +4941,7 @@ prepended, the behaviour of C<template_root> is in fact implemented
 within the default version of C<< $template->get_template_candidates() >>
 and you are free to support or ignore the behaviour in your implementation.
 
-=item $template->get_additional_dependencies()
+=item B<< $template->get_additional_dependencies() >>
 
 This method is called when building a list of dependencies for the
 current template for the purposes of checking if the cached version
@@ -5340,16 +5347,16 @@ change them when subclassing L<Template::Sandbox>.
 
 =over
 
-=item $template->find_template( I<$filename>, I<$current_dir> )
+=item B<< $template->find_template( >> I<$filename>, I<$current_dir> B<)>
 
-=item $template->find_include( I<$filename>, I<$current_dir> )
+=item B<< $template->find_include( >> I<$filename>, I<$current_dir> B<)>
 
 These two methods find a matching template for the given filename and
 dir, they basically query C<< $template->get_template_candidates() >>
 or C<< $template->get_include_candidates() >> and then traverse the
 list looking for a file that exists.
 
-=item $template->cache_key( I<$keys> )
+=item B<< $template->cache_key( >> I<$keys> B<)>
 
 Takes a hashref of parameters that uniquely identify the factors that
 could alter the compiled template and produces a scalar value suitable
@@ -5359,15 +5366,15 @@ In practice the key is a hashref of the defines (including template
 filename) used in compiling the template, and the result is an MD5
 hexdigest of a canonical C<nfreeze( $keys )> from L<Storable.pm>.
 
-=item $template->log_error( I<$message> )
+=item B<< $template->log_error( >> I<$message> B<)>
 
-=item $template->log_warning( I<$message> )
+=item B<< $template->log_warning( >> I<$message> B<)>
 
 Logs I<$message> with the logger object as an error or warning.
 
-=item $template->error( I<@message_fragments> )
+=item B<< $template->error( >> I<@message_fragments> B<)>
 
-=item $template->caller_error( I<@message_fragments> )
+=item B<< $template->caller_error( >> I<@message_fragments> B<)>
 
 Raises (and logs) an error with the message produced by concatinating
 C<@message_fragments> into a single string.  C<caller_error()> reports
@@ -5376,18 +5383,18 @@ the error from the point of view of the calling code.
 The error will have any relevent information to do with the current
 template position added.
 
-=item $template->fatal_exit( I<$message> )
+=item B<< $template->fatal_exit( >> I<$message> B<)>
 
-=item $template->caller_fatal_exit( I<$message> )
+=item B<< $template->caller_fatal_exit( >> I<$message> B<)>
 
 These two do the actual C<die> or C<croak> needed by
 C<error> and C<caller_error>, you can override these if you
 want to prevent the C<die> or C<croak> and perform some other
 behaviour.
 
-=item $template->warning( I<@message_fragments> )
+=item B<< $template->warning( >> I<@message_fragments> B<)>
 
-=item $template->caller_warning( I<@message_fragments> )
+=item B<< $template->caller_warning( >> I<@message_fragments> B<)>
 
 Raise (and log) a warning with a message composed of the message
 fragments provided.  C<caller_warning()> raises the warning from
@@ -5551,16 +5558,16 @@ impacts correct behaviour.
 =item Assigns within context-folded for loops persist
 
 There's a subtly inconsistent behaviour between C<for> loops that
-have been context-folded and those that haven't, if there is an
+have been I<context-folded> and those that haven't, if there is an
 assign to a new I<template variable> within the loop, in the
 non-folded case, the new variable will exist only for the duration
-of the loops, whereas the context-folded case will cause the new
+of the loops, whereas the I<context-folded> case will cause the new
 variable to exist until the end of the outer context the C<for>
 loop was called from.
 
-This is a bug, and the correct behaviour would be too not constant-fold
+This is a bug, and the correct behaviour would be too not I<context-fold>
 loop if there's an assign inside, however this is difficult to test until
-constant-folding of loops is performed during the compile-phase
+I<context-folding> of loops is performed during the compile-phase
 optimization rather than at runtime.
 
 =back
