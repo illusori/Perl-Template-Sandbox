@@ -3683,7 +3683,7 @@ statements are refered to as L</"CONDITIONAL STATEMENTS">.
 =item B<< <: for >> I<< iterator >> B<< in >> I<< group >> B<< :> >> I<< loop content >> B<< <: endfor :> >>
 
 The C<for> or C<foreach> statement cycles an I<< iterator >> variable through
-each element in the I<< group array >> or hash and substitutes the
+each element in the I<group> array or hash and substitutes the
 I<< loop content >> into the template output each time.
 
 See L</"LOOPS> for further details.
@@ -3746,10 +3746,10 @@ of the C<cr> special variable as detailed in L</"SPECIAL VARIABLES">.
 
 =head2 Variables
 
-Template variables refered to by bare names using a syntax designed to
-be familiar to javascript developers rather than perl developers.
-As such, it uses a 'dotted index' notation interchangably with
-square-bracket indices.
+I<Template variables> are refered to by bare names using a syntax
+designed to be familiar to javascript developers rather than perl
+developers. As such, it uses a 'dotted index' notation interchangably
+with square-bracket indices.
 
 For example, C<user> would refer to the template variable known as I<user>,
 and both C<user.name> and C<< user[ 'name' ] >> would refer to the
@@ -3899,8 +3899,8 @@ This will pass the contents of template variable C<q> as the first argument
 and the contents of C<lang> as the third.
 
 Note also that these function calls are not directly calls to perl functions,
-instead they are calls to functions that have been registered as "template
-functions" with the current template.
+instead they are calls to functions that have been registered as I<template
+functions> with the current template.
 
 By default only three functions are registered, those three are needed
 for internal behaviour of certain special variables and for the test
@@ -3965,7 +3965,7 @@ or:
 In either case the C<< mark_as_read >> method will be called on the object
 in the template variable C<< message >>, with an argument of C<< 1 >>.
 
-However, in keeping with the purpose of L<Template::Sandbox>>, you cannot
+However, in keeping with the purpose of L<Template::Sandbox>, you cannot
 just call methods on any old object, every method call is preceded by a
 call to C<< valid_template_method >> as a method on the target object,
 with the method to be called as an argument.
@@ -4115,7 +4115,7 @@ last.
 If the set to iterate across is evaluated to be a hash, then the
 iterator is set to each key of the array in alphabetical order, from
 first to last, with the special variable C<< iterator.__value__ >>
-set to the corressponding value of the hash in addition to the usual
+set to the corresponding value of the hash in addition to the usual
 special loop variables.
 
 =head2 Numeric Loops
@@ -4165,7 +4165,7 @@ This will try to load a template with literal filename
 whose filename is stored in the the C<our_files> array or hash with the
 index stored in the C<chosen_file> variable.
 
-=head2 Setting Compile Defines with C<include>
+=head2 Setting compile defines with C<include>
 
 It's possible to set L</"Compile Defines"> when including a file, to do
 so just set the values after the filename in the C<include> statement,
@@ -4175,12 +4175,12 @@ as in one of these examples:
   <: include transaction_row.html TDCLASSODD=green TDCLASSEVEN=blue :>
   <: include transaction_row.html TDCLASS="value with spaces" :>
 
-Any upper-case named parameter to C<include> will set the corressponding
-L</"Compile Define"> when compiling the included template, this define
+Any upper-case named parameter to C<include> will set the corresponding
+I<compile define> when compiling the included template, this define
 value will mask any existing define of that name for the duration of the
 compile of the included template. (And any templates it, in turn, includes.)
 
-=head2 Setting Scoped Variables with C<include>
+=head2 Setting scoped variables with C<include>
 
 You can also set variables scoped locally to the included template from
 the C<include> statement, you do so in much the same manner as setting
@@ -4301,7 +4301,7 @@ variable of a C<for> or C<foreach> loop.
 =item C<.__value__>
 
 Available only when iterating across a hash, this provides access
-to the value corressponding to the key the iterator is currently
+to the value corresponding to the key the iterator is currently
 set to, this can be less typing (and faster to execute) if the
 hash being iterated over was the result of a long expression,
 for example the following two loops are equivilent, but the second
