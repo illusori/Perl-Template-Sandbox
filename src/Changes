@@ -1,6 +1,13 @@
 Revision history for Template::Sandbox
 
+1.00_02 Version released at 2009-09-01-11:57.  *** Development version. ***
+        Version started at  2009-08-27-09:52.
+        Futher typo fixes and clarification for POD.
+        Added zero-width vs void-context assigns to bugs section.
+        Typo fix in t/10-constructor.t.
+
 1.00_01 Version released at 2009-08-27-08:02.  *** Development version. ***
+        Version started at  2009-08-26-13:51.
         Corrected string versions for ALL modules.
         Neaten synospis lines in POD.
         Numerous typo fixes in POD.
@@ -8,7 +15,6 @@ Revision history for Template::Sandbox
         Corrected 'no cache modules' test skips.
         Added 0.03 requirement for Log::Any.
         Suggest Cache::Cache 1.00 as recommendation.
-        Version started at  2009-08-26-13:51.
 
 
 1.00    Version released at 2009-08-26-13:18.
