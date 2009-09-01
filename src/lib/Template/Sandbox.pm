@@ -479,7 +479,7 @@ BEGIN
 {
     use Exporter   ();
 
-    $Template::Sandbox::VERSION     = '1.00_01';
+    $Template::Sandbox::VERSION     = '1.00_02';
     @Template::Sandbox::ISA         = qw( Exporter );
 
     @Template::Sandbox::EXPORT      = qw();
@@ -5569,6 +5569,18 @@ This is a bug, and the correct behaviour would be too not I<context-fold>
 loop if there's an assign inside, however this is difficult to test until
 I<context-folding> of loops is performed during the compile-phase
 optimization rather than at runtime.
+
+=item Void-context assigns should be zero-width
+
+Since I<void-context assigns> produce no template output, they should be
+subject to I<zero-width folding>, currently however the void-context
+flagging happens (long) after the I<zero-width folding>, so this doesn't
+happen.
+
+There's probably no reason why void-context flagging couldn't happen as
+part of the expression compilation stage, which would be in time to also
+flag it as zero-width, so this should be expected to happen in a future
+release.
 
 =back
 
