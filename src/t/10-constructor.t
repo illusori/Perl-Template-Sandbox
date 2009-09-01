@@ -10,7 +10,7 @@ use Template::Sandbox;
 BEGIN
 {
     eval "use Test::Exception";
-    plan skip_all => "Test::Exception required for testing diagnostics" if @_;
+    plan skip_all => "Test::Exception required for testing constructor" if @_;
 }
 
 plan tests => 3;
