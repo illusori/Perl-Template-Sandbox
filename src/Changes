@@ -1,5 +1,10 @@
 Revision history for Template::Sandbox
 
+1.00_03 Version released at 2009-09-04-12:14.  *** Development version. ***
+        Version started at  2009-09-04-11:43.
+        Made Test::Exception a build requirement rather than optional.
+        Fixed @_ vs $@ idiotic cut-n-paste typo in tests.
+
 1.00_02 Version released at 2009-09-01-11:57.  *** Development version. ***
         Version started at  2009-08-27-09:52.
         Futher typo fixes and clarification for POD.
