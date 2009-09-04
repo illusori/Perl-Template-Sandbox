@@ -10,27 +10,25 @@ use FindBin;
 use Cwd ();
 
 use Template::Sandbox qw/:function_sugar/;
+use Test::Exception;
 
 my ( %caches );
 
 BEGIN
 {
-    eval "use Test::Exception";
-    plan skip_all => "Test::Exception required for testing caching" if @_;
-
     %caches = (
         'Cache::Cache'        => undef,
         'Cache::CacheFactory' => undef,
         );
 
     eval "use Cache::MemoryCache";
-    $caches{ 'Cache::Cache' } = eval "Cache::MemoryCache->new()" unless @_;    
+    $caches{ 'Cache::Cache' } = Cache::MemoryCache->new() unless $@;
 
     eval "use Cache::CacheFactory";
-    $caches{ 'Cache::CacheFactory' } = eval "Cache::CacheFactory->new(
+    $caches{ 'Cache::CacheFactory' } = Cache::CacheFactory->new(
         storage  => 'file',
         validity => 'lastmodified',
-        )" unless @_;
+        ) unless $@;
 
     plan skip_all =>
         "Cache::MemoryCache or Cache::CacheFactory required for cache tests"
