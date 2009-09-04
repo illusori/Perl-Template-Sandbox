@@ -10,12 +10,7 @@ use FindBin;
 use Cwd ();
 
 use Template::Sandbox;
-
-BEGIN
-{
-    eval "use Test::Exception";
-    plan skip_all => "Test::Exception required for testing file operations" if @_;
-}
+use Test::Exception;
 
 plan tests => 20;
 

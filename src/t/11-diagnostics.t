@@ -8,12 +8,7 @@ use Test::More;
 use Log::Any;
 
 use Template::Sandbox;
-
-BEGIN
-{
-    eval "use Test::Exception";
-    plan skip_all => "Test::Exception required for testing diagnostics" if @_;
-}
+use Test::Exception;
 
 plan tests => 13;
 

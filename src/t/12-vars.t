@@ -10,7 +10,7 @@ use Template::Sandbox;
 BEGIN
 {
     eval "use Test::Exception";
-    plan skip_all => "Test::Exception required for testing template vars" if @_;
+    plan skip_all => "Test::Exception required for testing template vars" if $@;
 }
 
 plan tests => 18;

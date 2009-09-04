@@ -6,12 +6,7 @@ use warnings;
 use Test::More;
 
 use Template::Sandbox;
-
-BEGIN
-{
-    eval "use Test::Exception";
-    plan skip_all => "Test::Exception required for testing constructor" if @_;
-}
+use Test::Exception;
 
 plan tests => 3;
 

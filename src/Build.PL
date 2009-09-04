@@ -14,6 +14,7 @@ my $build = Module::Build->new(
         'FindBin'          => 0,
         'Module::Build'    => 0.07,
         'Test::More'       => 0,
+        'Test::Exception'  => 0,
         },
     requires => {
         'Carp'             => 0,

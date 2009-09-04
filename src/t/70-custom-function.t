@@ -6,12 +6,7 @@ use warnings;
 use Test::More;
 
 use Template::Sandbox qw/:function_sugar/;
-
-BEGIN
-{
-    eval "use Test::Exception";
-    plan skip_all => "Test::Exception required for testing custom functions" if @_;
-}
+use Test::Exception;
 
 plan tests => 63;
 

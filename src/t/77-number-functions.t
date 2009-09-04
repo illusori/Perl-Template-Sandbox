@@ -7,12 +7,7 @@ use Test::More;
 
 use Template::Sandbox;
 use Template::Sandbox::NumberFunctions qw/:all/;
-
-BEGIN
-{
-    eval "use Test::Exception";
-    plan skip_all => "Test::Exception required for testing function libraries" if @_;
-}
+use Test::Exception;
 
 my ( @tests );
 

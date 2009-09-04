@@ -7,12 +7,7 @@ use Test::More;
 
 use Template::Sandbox;
 use Template::Sandbox::Library;
-
-BEGIN
-{
-    eval "use Test::Exception";
-    plan skip_all => "Test::Exception required for testing function libraries" if @_;
-}
+use Test::Exception;
 
 my ( $num_single_tests );
 my ( $num_instance_imports, $num_import_tests );
