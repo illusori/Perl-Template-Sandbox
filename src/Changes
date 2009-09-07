@@ -1,5 +1,9 @@
 Revision history for Template::Sandbox
 
+1.01    Version released at 2009-09-07-11:17.
+        Version started at  2009-09-07-11:17.
+        Released rc 1.00_03 as 1.01 stable.
+
 1.00_03 Version released at 2009-09-04-12:14.  *** Development version. ***
         Version started at  2009-09-04-11:43.
         Made Test::Exception a build requirement rather than optional.
