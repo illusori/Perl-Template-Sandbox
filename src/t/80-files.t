@@ -246,7 +246,7 @@ is( ${$template->run()}, $expected, 'includes of file in subdir' );
 #  20: include without read-permission.
 SKIP:
 {
-    my ( $unreadable_file );
+    my ( $unreadable_file, $fh );
 
     $unreadable_file = 'unreadable.txt';
     $unreadable_file = File::Spec->catfile( $template_root, $unreadable_file );
@@ -257,6 +257,15 @@ SKIP:
     skip "Unable to make $unreadable_file unreadable prior to tests" => 3
         if -r $unreadable_file;
 
+    #  Additional check because of people running tests as admin under cygwin.
+    #  TODO: could extract localized file permission error text here for regexp
+    $fh = IO::File->new( "< $unreadable_file" );
+    if( $fh )
+    {
+        $fh->close();
+        skip "Unable to make $unreadable_file unreadable prior to tests" => 3;
+    }
+
     $template_file = 'unreadable.txt';
     $template_file = File::Spec->catfile( $template_root, $template_file );
     throws_ok
@@ -265,21 +274,21 @@ SKIP:
                 template => $template_file,
                 );
         }
-        qr{Template initialization error: Unable to read $unreadable_file: Permission denied at [^\s]*/Template/Sandbox\.pm line},
+        qr{Template initialization error: Unable to read $unreadable_file: .*? at [^\s]*/Template/Sandbox\.pm line},
         'error on construct-option unreadable-but-existing template';
 
     $template_file = 'unreadable.txt';
     $template_file = File::Spec->catfile( $template_root, $template_file );
     $template = Template::Sandbox->new();
     throws_ok { $template->set_template( $template_file ) }
-        qr{Template post-initialization error: Unable to read $unreadable_file: Permission denied at [^\s]*/Template/Sandbox\.pm line},
+        qr{Template post-initialization error: Unable to read $unreadable_file: .*? at [^\s]*/Template/Sandbox\.pm line},
         'error on post-construct unreadable-but-existing template';
 
     $template_file = 'unreadable_include.txt';
     $template_file = File::Spec->catfile( $template_root, $template_file );
     $template = Template::Sandbox->new();
     throws_ok { $template->set_template( $template_file ) }
-        qr{Template compile error: Unable to read $unreadable_file: Permission denied at line 2, char 1 of '[^\s]*/t/test_templates/unreadable_include\.txt' at [^\s]*/Template/Sandbox\.pm line},
+        qr{Template compile error: Unable to read $unreadable_file: .*? at line 2, char 1 of '[^\s]*/t/test_templates/unreadable_include\.txt' at [^\s]*/Template/Sandbox\.pm line},
         'error on include of unreadable-but-existing file';
 
     #  TODO: should probably try to restore to previous setting.
