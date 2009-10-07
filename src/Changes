@@ -1,5 +1,10 @@
 Revision history for Template::Sandbox
 
+1.01_01 Version released at 2009-10-07-10:48.  *** Development version. ***
+        Version started at  2009-09-10-13:25.
+        No-longer assumes english-localized perl error text in tests.
+        Unreadable template test: improved check that it really is unreadable.
+
 1.01    Version released at 2009-09-07-11:17.
         Version started at  2009-09-07-11:17.
         Released rc 1.00_03 as 1.01 stable.
