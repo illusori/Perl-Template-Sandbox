@@ -434,6 +434,7 @@ my $expr_regexp = qr/
 #                \:
 #                $atomic_expr_regexp
 #            )
+my $anchored_expr_regexp = qr/^$expr_regexp$/;
 
 my $capture_expr_op_remain_regexp = qr/
     ^
@@ -2150,10 +2151,10 @@ sub _compile_expression
     $expression =~ s/\s+$//;
 
 #$self->error( "expression = '$expression', expr_regexp = $expr_regexp" )
-#  unless $expression =~ /^$expr_regexp$/;
+#  unless $expression =~ $anchored_expr_regexp;
 
     $self->error( "Not a well-formed expression: $expression" )
-        unless $expression =~ /^$expr_regexp$/;
+        unless $expression =~ $anchored_expr_regexp;
 
     while( $expression =~ $capture_expr_op_remain_regexp )
     {
