@@ -1452,7 +1452,8 @@ sub _compile_template
     my ( $self ) = @_;
     my ( $i, @hunks, @files, @pos_stack, @nest_stack, @compiled, %includes,
          %trim, $trim_next, %file_numbers, @define_stack,
-         $local_syntaxes, $local_token_aliases, $local_syntax_regexp );
+         $local_syntaxes, $local_token_aliases, $local_syntax_regexp,
+         $hunk_regexp );
 
     @files           = ( $self->{ filename } );
     %file_numbers    = ( $self->{ filename } => 0 );
@@ -1485,7 +1486,17 @@ sub _compile_template
             values( %{$syntaxes{ '.instr' }} ) ) );
     $local_syntax_regexp = ' | ' . $local_syntax_regexp
         if $local_syntax_regexp;
-#  TODO: qr// it?  need to benchmark
+    $hunk_regexp = qr/^<: \s*
+        (
+          var | expr |
+          (?:if|unless) | else? \s* (?:if|unless) | else |
+          end \s* (?:if|unless) |
+          for(?:each)? | end \s* for(?:each)? |
+          include | end \s* include |
+          \# |
+          debug
+          $local_syntax_regexp
+        ) \s+ (.*?) \s* :> (.+)? $/sx;
 
     @hunks = split( /(?=<:)/, $self->{ template }, -1 );
     delete $self->{ template };
@@ -1503,18 +1514,7 @@ sub _compile_template
         $pos = [ @{$pos_stack[ 0 ]}[ 0..2 ] ];
         $self->{ current_pos } = $pos;
 
-#  TODO: now that matching regexp is variable, unroll qr// of it outside loop.
-        if( $hunk =~ /^<: \s*
-            (
-              var | expr |
-              (?:if|unless) | else? \s* (?:if|unless) | else |
-              end \s* (?:if|unless) |
-              for(?:each)? | end \s* for(?:each)? |
-              include | end \s* include |
-              \# |
-              debug
-              $local_syntax_regexp
-            ) \s+ (.*?) \s* :> (.+)? $/sx )
+        if( $hunk =~ $hunk_regexp )
         {
             my ( $token, $syntax, $args, $rest );
 
@@ -2158,14 +2158,11 @@ sub _compile_expression
 
     while( $expression =~ $capture_expr_op_remain_regexp )
     {
-        my ( $lhs, $op, $rhs );
-
-        $lhs = $1;
-        $op  = $2;
-        $rhs = $3;
-
-        push @top_level, $lhs, $op;
-        $expression = $rhs;
+        # $lhs = $1;
+        # $op  = $2;
+        # $rhs = $3;
+        push @top_level, $1, $2;
+        $expression = $3;
     }
 
     return( $self->_build_op_tree( [ @top_level, $expression ] ) )
