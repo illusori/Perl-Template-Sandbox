@@ -61,11 +61,11 @@ sub VAR()      { 104; }
 sub TEMPLATE() { 105; }
 
 #  Template function array indices.
-sub FUNC_FUNC()         { 0; }
-sub FUNC_ARG_NUM()      { 1; }
-sub FUNC_NEEDS_TEMPLATE { 2; }
-sub FUNC_INCONST()      { 3; }
-sub FUNC_UNDEF_OK()     { 4; }
+sub FUNC_FUNC()           { 0; }
+sub FUNC_ARG_NUM()        { 1; }
+sub FUNC_NEEDS_TEMPLATE() { 2; }
+sub FUNC_INCONST()        { 3; }
+sub FUNC_UNDEF_OK()       { 4; }
 
 #  The lower the weight the tighter it binds.
 my %operators = (
@@ -1896,7 +1896,8 @@ sub _compile_template
 sub _optimize_template
 {
     my ( $self, $template ) = @_;
-    my ( $program, @nest_stack, %deletes, @function_table, %function_index );
+    my ( $program, @nest_stack, %deletes, @function_table, %function_index,
+         %jump_targets );
 
     #  Optimization pass:
     #    TODO: unroll constant low-count fors?
@@ -1980,27 +1981,31 @@ sub _optimize_template
     }
     $self->_delete_instr( $program, keys( %deletes ) ) if %deletes;
 
+
     #  Now scan for adjacent literals to merge where the second
     #  isn't a jump target.
     %deletes = ();
-    OUTER: for( my $i = $#{$program}; $i > 0; $i-- )
+
+    #  For speed, prebuild a list of all jump targets.
+    %jump_targets = ();
+    foreach my $line ( @{$program} )
+    {
+        next unless $line->[ 0 ] == JUMP or
+                    $line->[ 0 ] == JUMP_IF or
+                    $line->[ 0 ] == FOR or
+                    $line->[ 0 ] == END_FOR;
+        $jump_targets{ $line->[ 2 ] } = 1;
+    }
+
+    #  Now scan for adjacent literals.
+    for( my $i = $#{$program}; $i > 0; $i-- )
     {
         #  Are both ourself and our previous instr a literal?
         next if $program->[ $i ]->[ 0 ]     != LITERAL or
                 $program->[ $i - 1 ]->[ 0 ] != LITERAL;
 
         #  Do any jumps lead to the second literal?
-        for( my $j = 0; $j <= $#{$program}; $j++ )
-        {
-            my ( $j_instr );
-
-            $j_instr = $program->[ $j ]->[ 0 ];
-            next unless $j_instr == JUMP or
-                        $j_instr == JUMP_IF or
-                        $j_instr == FOR or
-                        $j_instr == END_FOR;
-            next OUTER if $program->[ $j ]->[ 2 ] == $i;
-        }
+        next if $jump_targets{ $i };
 
 #warn "Merging literal $i to previous.";
 #warn "Merging literals [" . $program->[ $i - 1 ]->[ 2 ] . "] and [" . $program->[ $i ]->[ 2 ] . "]";
