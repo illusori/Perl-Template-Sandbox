@@ -479,7 +479,7 @@ BEGIN
 {
     use Exporter   ();
 
-    $Template::Sandbox::VERSION     = '1.01_01';
+    $Template::Sandbox::VERSION     = '1.01_02';
     @Template::Sandbox::ISA         = qw( Exporter );
 
     @Template::Sandbox::EXPORT      = qw();
@@ -1866,11 +1866,16 @@ sub _compile_template
     }
 
     #  We're done.
-    $self->{ template } = $self->_optimize_template(
-        {
+    $self->{ template } = {
             program => [ @compiled ],
             files   => [ @files ],
-        } );
+        };
+    $self->{ template } = $self->_optimize_template( $self->{ template } );
+#    $self->{ template } = $self->_optimize_template(
+#        {
+#            program => [ @compiled ],
+#            files   => [ @files ],
+#        } );
     delete $self->{ current_pos };
     delete $self->{ pos_stack };
     delete $self->{ files };
@@ -1901,8 +1906,6 @@ sub _optimize_template
     #  Void-wrap assign expressions.
     for( my $i = 0; $i <= $#{$program}; $i++ )
     {
-        my ( $expr );
-
         #  Are we an EXPR instr and is our expr an OP_TREE expr and op '='?
         next unless $program->[ $i ]->[ 0 ] == EXPR and
                     $program->[ $i ]->[ 2 ]->[ 0 ] == OP_TREE and
@@ -1952,7 +1955,7 @@ sub _optimize_template
             $deletes{ $i } = 1;
         }
     }
-    $self->_delete_instr( $program, keys( %deletes ) );
+    $self->_delete_instr( $program, keys( %deletes ) ) if %deletes;
 
 
     #  Trim empty context pushes (TODO: that have no assigns in top level)
@@ -1975,7 +1978,7 @@ sub _optimize_template
             next;
         }
     }
-    $self->_delete_instr( $program, keys( %deletes ) );
+    $self->_delete_instr( $program, keys( %deletes ) ) if %deletes;
 
     #  Now scan for adjacent literals to merge where the second
     #  isn't a jump target.
@@ -2007,7 +2010,7 @@ sub _optimize_template
         $deletes{ $i } = 1;
     }
 #warn "Literal merges: " . scalar( keys( %deletes ) );
-    $self->_delete_instr( $program, keys( %deletes ) );
+    $self->_delete_instr( $program, keys( %deletes ) ) if %deletes;
 
     #  TODO: look for loops that make no use of special loop vars.
 
@@ -2084,28 +2087,53 @@ sub _optimize_template
 sub _delete_instr
 {
     my ( $self, $program, @addrs ) = @_;
-    my ( $renumber );
+    my ( %renumbers );
 
-#warn "Deleting instr $addr: " . Data::Dumper::Dumper( $program->[ $addr ] );
+#warn "** Deleting instr: " . join( ', ', @addrs ) . ".";
+#warn "-- Pre:\n" . $self->dumpable_template();
 
     #  Delete all the stuff we've marked for deletion.
-    foreach my $addr ( sort { $b <=> $a } @addrs )
-    {
-        $renumber = $#{$program} + 1;
-        while( --$renumber >= 0 )
-        {
-            if( $program->[ $renumber ]->[ 0 ] == JUMP    or
-                $program->[ $renumber ]->[ 0 ] == JUMP_IF or
-                $program->[ $renumber ]->[ 0 ] == FOR     or
-                $program->[ $renumber ]->[ 0 ] == END_FOR )
-            {
-                $program->[ $renumber ]->[ 2 ]--
-                    if $program->[ $renumber ]->[ 2 ] > $addr;
-            }
-        }
 
+    #  First we need to sort the deletes.
+    @addrs = sort { $a <=> $b } @addrs;
+
+    #  Then we delete the instructions from last to first.
+    #  (To avoid renumbering issues).
+    foreach my $addr ( reverse( @addrs ) )
+    {
         splice( @{$program}, $addr, 1 );
     }
+
+#warn "-- Deleted:\n" . $self->dumpable_template();
+
+    #  Now we need to renumber any jump and loop targets affected.
+    %renumbers = ();
+    foreach my $line ( @{$program} )
+    {
+        next unless $line->[ 0 ] == JUMP    or
+                    $line->[ 0 ] == JUMP_IF or
+                    $line->[ 0 ] == FOR     or
+                    $line->[ 0 ] == END_FOR;
+
+        if( exists( $renumbers{ $line->[ 2 ] } ) )
+        {
+            $line->[ 2 ] = $renumbers{ $line->[ 2 ] };
+            next;
+        }
+
+        my $offset = 0;
+        foreach my $addr ( @addrs )
+        {
+            last if $addr >= $line->[ 2 ];
+            $offset++;
+        }
+
+        #  Cache the result, if-elsif-else will have lots of the same targets.
+        $renumbers{ $line->[ 2 ] } = $line->[ 2 ] - $offset;
+        $line->[ 2 ] = $line->[ 2 ] - $offset;
+    }
+
+#warn "-- Renumbered:\n" . $self->dumpable_template();
 }
 
 sub _compile_expression
