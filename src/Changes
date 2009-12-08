@@ -1,5 +1,16 @@
 Revision history for Template::Sandbox
 
+1.01_02 Version released at 2009-12-08-12:38.  *** Development version. ***
+        Version started at  2009-12-08-08:29.
+        Release focus: optimizing the compile and optimization phases.
+        Major optimization to jump target renumbering in template optimization.
+        Only call _delete_instr() when actually needed.  Doh.
+        Prebuild list of jump-targets for speed when merging adjacent literals.
+        Correctly made FUNC_NEEDS_TEMPLATE a constant sub.
+        Use tr/// instead of m// for newline-counting during compile.
+        Replace nasty array munging during compile with splice().
+        Moved a few regexp compiles outside the loops using them.
+
 1.01_01 Version released at 2009-10-07-10:48.  *** Development version. ***
         Version started at  2009-09-10-13:25.
         No-longer assumes english-localized perl error text in tests.
