@@ -1531,8 +1531,7 @@ sub _compile_template
             if( defined( $rest ) )
             {
                 $hunk =~ s/:>(?:.*)$/:>/s;
-                @hunks = ( @hunks[ 0..$i - 1 ], $hunk, $rest,
-                    @hunks[ $i + 1..$#hunks ] );
+                splice( @hunks, $i, 1, $hunk, $rest );
                 $next = $i + 1;
             }
 
@@ -1775,9 +1774,8 @@ sub _compile_template
                     @inc_hunks = split( /(?=<:)/, $inc_template, -1 );
                     $inc_template = 0;
 
-                    @hunks = ( @hunks[ 0..$i ], @inc_hunks,
-                        '<: endinclude :>',
-                        @hunks[ $i + 1..$#hunks ] );
+                    splice( @hunks, $i + 1, 0,
+                        @inc_hunks, '<: endinclude :>' );
 
                     push @compiled,
                         [ CONTEXT_PUSH, $pos, $args ];
@@ -1833,7 +1831,9 @@ sub _compile_template
 
         #  Update pos.
         #  TODO: adjust for any trimmage.
-        $lines = $#{ [ $hunk =~ /(\n)/g ] } + 1;
+#        $lines = () = $hunk =~ /\n/g;
+        $lines = $hunk =~ tr/\n//;
+#        $lines = $#{ [ $hunk =~ /\n/g ] } + 1;
         $pos_stack[ 0 ][ 1 ] += $lines;
         if( $lines )
         {
