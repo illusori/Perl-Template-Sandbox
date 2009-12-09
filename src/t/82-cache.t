@@ -1,4 +1,5 @@
-#!perl -T
+#!perl
+##!perl -T # ./Build testcover has started dying with taint on here. :/
 
 use strict;
 use warnings;
@@ -54,7 +55,7 @@ my ( $template, $template_root, $expected, $compile_counter,
     foreach my $startdir ( Cwd::cwd(), $FindBin::Bin )
     {
         push @candidate_dirs,
-            File::Spec->catdir( $startdir, 't/test_templates' ),
+            File::Spec->catdir( $startdir, 't', 'test_templates' ),
             File::Spec->catdir( $startdir, 'test_templates' );
     }
 

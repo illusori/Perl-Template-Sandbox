@@ -24,7 +24,7 @@ my ( $template, $template_root, $template_file, $expected );
     foreach my $startdir ( Cwd::cwd(), $FindBin::Bin )
     {
         push @candidate_dirs,
-            File::Spec->catdir( $startdir, 't/test_templates' ),
+            File::Spec->catdir( $startdir, 't', 'test_templates' ),
             File::Spec->catdir( $startdir, 'test_templates' );
     }
 
@@ -89,7 +89,7 @@ throws_ok {
         template      => $template_file,
         );
     }
-    qr{Template initialization error: Unable to find matching template from candidates:\n[^\s]*/t/test_templates/this_file_does_not_exist\.txt at [^\s]*/Template/Sandbox\.pm line},
+    qr{Template initialization error: Unable to find matching template from candidates:\n.*t.*test_templates.*this_file_does_not_exist\.txt at .*Template.*Sandbox\.pm line},
     'construct-option missing template file';
 
 #
@@ -98,7 +98,7 @@ $template_file = 'this_file_does_not_exist.txt';
 $template = Template::Sandbox->new();
 $template->set_template_root( $template_root );
 throws_ok { $template->set_template( $template_file ) }
-    qr{Template post-initialization error: Unable to find matching template from candidates:\n[^\s]*/t/test_templates/this_file_does_not_exist\.txt at [^\s]*/Template/Sandbox\.pm line},
+    qr{Template post-initialization error: Unable to find matching template from candidates:\n.*t.*test_templates.*this_file_does_not_exist\.txt at .*Template.*Sandbox\.pm line},
     'post-construct missing template file';
 
 #
@@ -188,7 +188,7 @@ $template_file = 'recursive_include.txt';
 $template_file = File::Spec->catfile( $template_root, $template_file );
 $template = Template::Sandbox->new();
 throws_ok { $template->set_template( $template_file ) }
-    qr{Template compile error: recursive include of [^\s]*/t/test_templates/recursive_include\.txt at line 1, char 1 of '[^\s]*/t/test_templates/recursive_include\.txt' at [^\s]*/Template/Sandbox\.pm line},
+    qr{Template compile error: recursive include of .*t.*test_templates.*recursive_include\.txt at line 1, char 1 of '.*t.*test_templates.*recursive_include\.txt' at .*Template.*Sandbox\.pm line},
     'directly recursive include';
 
 #
@@ -197,7 +197,7 @@ $template_file = 'alternating_recursive_include1.txt';
 $template_file = File::Spec->catfile( $template_root, $template_file );
 $template = Template::Sandbox->new();
 throws_ok { $template->set_template( $template_file ) }
-    qr{Template compile error: recursive include of [^\s]*/t/test_templates/alternating_recursive_include1\.txt at line 1, char 1 of '[^\s]*/t/test_templates/alternating_recursive_include2\.txt'\n  called from line 1, char 49 of '[^\s]*/t/test_templates/alternating_recursive_include1\.txt' at [^\s]*/Template/Sandbox\.pm line},
+    qr{Template compile error: recursive include of .*t.*test_templates.*alternating_recursive_include1\.txt at line 1, char 1 of '.*t.*test_templates.*alternating_recursive_include2\.txt'\n  called from line 1, char 49 of '.*t.*test_templates.*alternating_recursive_include1\.txt' at .*Template.*Sandbox\.pm line},
     'indirectly recursive include';
 
 #
@@ -206,7 +206,7 @@ $template_file = 'bad_include_param.txt';
 $template_file = File::Spec->catfile( $template_root, $template_file );
 $template = Template::Sandbox->new();
 throws_ok { $template->set_template( $template_file ) }
-    qr{Template compile error: Undefined value for keyword: 'paramwithoutavalue' on parse_args\( included_simple\.txt paramwithavalue='value' paramwithoutavalue, include \) at line 1, char 1 of '[^\s]*/t/test_templates/bad_include_param\.txt' at [^\s]*/Template/Sandbox\.pm line},
+    qr{Template compile error: Undefined value for keyword: 'paramwithoutavalue' on parse_args\( included_simple\.txt paramwithavalue='value' paramwithoutavalue, include \) at line 1, char 1 of '.*t.*test_templates.*bad_include_param\.txt' at .*Template.*Sandbox\.pm line},
     'error on bad param to include token';
 
 #
@@ -215,7 +215,7 @@ $template_file = 'no_such_include.txt';
 $template_file = File::Spec->catfile( $template_root, $template_file );
 $template = Template::Sandbox->new();
 throws_ok { $template->set_template( $template_file ) }
-    qr{Template compile error: Unable to find matching include from candidates:\n[^\s]*/t/test_templates/this_include_intentionally_left__missing\.txt at line 1, char 1 of '[^\s]*/t/test_templates/no_such_include\.txt' at [^\s]*/Template/Sandbox\.pm line},
+    qr{Template compile error: Unable to find matching include from candidates:\n.*t.*test_templates.*this_include_intentionally_left__missing\.txt at line 1, char 1 of '.*t.*test_templates.*no_such_include\.txt' at .*Template.*Sandbox\.pm line},
     'error on no such include';
 
 #  16: include of empty-string filename.
@@ -274,21 +274,21 @@ SKIP:
                 template => $template_file,
                 );
         }
-        qr{Template initialization error: Unable to read $unreadable_file: .*? at [^\s]*/Template/Sandbox\.pm line},
+        qr{Template initialization error: Unable to read $unreadable_file: .*? at .*Template.*Sandbox\.pm line},
         'error on construct-option unreadable-but-existing template';
 
     $template_file = 'unreadable.txt';
     $template_file = File::Spec->catfile( $template_root, $template_file );
     $template = Template::Sandbox->new();
     throws_ok { $template->set_template( $template_file ) }
-        qr{Template post-initialization error: Unable to read $unreadable_file: .*? at [^\s]*/Template/Sandbox\.pm line},
+        qr{Template post-initialization error: Unable to read $unreadable_file: .*? at .*Template.*Sandbox\.pm line},
         'error on post-construct unreadable-but-existing template';
 
     $template_file = 'unreadable_include.txt';
     $template_file = File::Spec->catfile( $template_root, $template_file );
     $template = Template::Sandbox->new();
     throws_ok { $template->set_template( $template_file ) }
-        qr{Template compile error: Unable to read $unreadable_file: .*? at line 2, char 1 of '[^\s]*/t/test_templates/unreadable_include\.txt' at [^\s]*/Template/Sandbox\.pm line},
+        qr{Template compile error: Unable to read $unreadable_file: .*? at line 2, char 1 of '.*t.*test_templates.*unreadable_include\.txt' at .*Template.*Sandbox\.pm line},
         'error on include of unreadable-but-existing file';
 
     #  TODO: should probably try to restore to previous setting.

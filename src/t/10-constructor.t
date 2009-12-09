@@ -29,5 +29,5 @@ throws_ok
             this_constructor_option_doesnt_exist => 1,
             );
     }
-    qr{Template error: Unknown constructor param: 'this_constructor_option_doesnt_exist' at [^\s]*/Template/Sandbox\.pm line},
+    qr{Template error: Unknown constructor param: 'this_constructor_option_doesnt_exist' at .*Template.*Sandbox\.pm line},
     'error on construct with unknown option';

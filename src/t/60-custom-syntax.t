@@ -233,7 +233,7 @@ $template = Template::Sandbox->new();
 {
     local $^W = 1;
     warns_ok { $template->unregister_template_syntax( $token ) }
-        qr/Template post-initialization error: Template syntax '$token' does not exist, cannot be removed. at [^\s]*t\/60-custom-syntax\.t line/,
+        qr/Template post-initialization error: Template syntax '$token' does not exist, cannot be removed. at .*60-custom-syntax\.t line/,
         'warn on unregister of non-existing syntax';
 }
 {
@@ -263,7 +263,7 @@ $template->register_template_syntax(
                     },
                 );
         }
-        qr/Template post-initialization error: Template syntax '$token' exists, overwriting. at [^\s]*t\/60-custom-syntax\.t line/,
+        qr/Template post-initialization error: Template syntax '$token' exists, overwriting. at .*60-custom-syntax\.t line/,
         'warn on register of existing syntax';
 }
 {
@@ -337,7 +337,7 @@ throws_ok
                 ],
             );
     }
-    qr/Template initialization error: Bad template syntax '$token' to register_template_syntax\(\), expected hash ref, got: 'expecting a hashref\? tough luck\.' at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template initialization error: Bad template syntax '$token' to register_template_syntax\(\), expected hash ref, got: 'expecting a hashref\? tough luck\.' at .*Template.*Sandbox\.pm line/,
     'error on bad definition (string) for construct-option custom syntax';
 throws_ok
     {
@@ -347,7 +347,7 @@ throws_ok
                 ],
             );
     }
-    qr/Template initialization error: Bad template syntax '$token' to register_template_syntax\(\), expected hash ref, got: ARRAY at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template initialization error: Bad template syntax '$token' to register_template_syntax\(\), expected hash ref, got: ARRAY at .*Template.*Sandbox\.pm line/,
     'error on bad definition (arrayref) for construct-option custom syntax';
 throws_ok
     {
@@ -360,7 +360,7 @@ throws_ok
                 ],
             );
     }
-    qr/Template initialization error: Missing compile callback for syntax nonexistingtoken at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template initialization error: Missing compile callback for syntax nonexistingtoken at .*Template.*Sandbox\.pm line/,
     'error on missing compile callback for construct-option custom syntax';
 throws_ok
     {
@@ -372,7 +372,7 @@ throws_ok
                 ],
             );
     }
-    qr/Template initialization error: Missing run callback for syntax nonexistingtoken at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template initialization error: Missing run callback for syntax nonexistingtoken at .*Template.*Sandbox\.pm line/,
     'error on missing run callback for construct-option custom syntax';
 
 #
@@ -384,7 +384,7 @@ throws_ok
             $token => 'expecting a hashref? tough luck.',
             );
     }
-    qr/Template error: Bad template syntax '$token' to register_template_syntax\(\), expected hash ref, got: 'expecting a hashref\? tough luck\.' at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template error: Bad template syntax '$token' to register_template_syntax\(\), expected hash ref, got: 'expecting a hashref\? tough luck\.' at .*Template.*Sandbox\.pm line/,
     'error on bad definition (string) for post-construct custom syntax';
 throws_ok
     {
@@ -392,7 +392,7 @@ throws_ok
             $token => [ 'expecting a hashref? tough luck.' ],
             );
     }
-    qr/Template error: Bad template syntax '$token' to register_template_syntax\(\), expected hash ref, got: ARRAY at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template error: Bad template syntax '$token' to register_template_syntax\(\), expected hash ref, got: ARRAY at .*Template.*Sandbox\.pm line/,
     'error on bad definition (arrayref) for post-construct custom syntax';
 throws_ok
     {
@@ -403,7 +403,7 @@ throws_ok
                 },
             );
     }
-    qr/Template error: Missing compile callback for syntax nonexistingtoken at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template error: Missing compile callback for syntax nonexistingtoken at .*Template.*Sandbox\.pm line/,
     'error on missing compile callback for post-construct custom syntax';
 throws_ok
     {
@@ -413,7 +413,7 @@ throws_ok
                 },
             );
     }
-    qr/Template error: Missing run callback for syntax nonexistingtoken at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template error: Missing run callback for syntax nonexistingtoken at .*Template.*Sandbox\.pm line/,
     'error on missing run callback for post-construct custom syntax';
 
 

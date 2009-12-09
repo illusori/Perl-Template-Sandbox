@@ -377,7 +377,7 @@ $template = Template::Sandbox->new();
 {
     local $^W = 1;
     warns_ok { $template->unregister_template_function( $function ) }
-        qr/Template post-initialization error: Template function 'nonexistingfunction' does not exist, cannot be removed. at [^\s]*\/70-custom-function\.t line/,
+        qr/Template post-initialization error: Template function 'nonexistingfunction' does not exist, cannot be removed. at .*70-custom-function\.t line/,
         'warn on unregister of non-existing function';
 }
 {
@@ -401,7 +401,7 @@ $template->register_template_function(
                     sub { '[post-construction custom function was ere]' },
                 );
         }
-        qr/Template post-initialization error: Template function 'nonexistingfunction' exists, overwriting. at [^\s]*\/70-custom-function\.t line/,
+        qr/Template post-initialization error: Template function 'nonexistingfunction' exists, overwriting. at .*70-custom-function\.t line/,
         'warn on register of existing function';
 }
 {
@@ -469,7 +469,7 @@ throws_ok
                 ],
             );
     }
-    qr/Template initialization error: Bad template function '$function' to register_template_function\(\), expected sub ref or 'function_sugar'ed sub ref, got: HASH at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template initialization error: Bad template function '$function' to register_template_function\(\), expected sub ref or 'function_sugar'ed sub ref, got: HASH at .*Template.*Sandbox\.pm line/,
     'error on hashref definition in construct-option function';
 
 #
@@ -483,7 +483,7 @@ throws_ok
                 ],
             );
     }
-    qr/Template initialization error: Bad template function '$function' to register_template_function\(\), expected sub ref or 'function_sugar'ed sub ref, got: 'you were expecting an arrayref or coderef\?' at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template initialization error: Bad template function '$function' to register_template_function\(\), expected sub ref or 'function_sugar'ed sub ref, got: 'you were expecting an arrayref or coderef\?' at .*Template.*Sandbox\.pm line/,
     'error on scalar definition in construct-option function';
 
 #
@@ -495,7 +495,7 @@ throws_ok
             $function => { 'you were expecting' => 'an arrayref or coderef?' },
             );
     }
-    qr/Template post-initialization error: Bad template function '$function' to register_template_function\(\), expected sub ref or 'function_sugar'ed sub ref, got: HASH at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template post-initialization error: Bad template function '$function' to register_template_function\(\), expected sub ref or 'function_sugar'ed sub ref, got: HASH at .*Template.*Sandbox\.pm line/,
     'error on hashref definition in post-construct function';
 
 #
@@ -507,7 +507,7 @@ throws_ok
             $function => 'you were expecting an arrayref or coderef?',
             );
     }
-    qr/Template post-initialization error: Bad template function '$function' to register_template_function\(\), expected sub ref or 'function_sugar'ed sub ref, got: 'you were expecting an arrayref or coderef\?' at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template post-initialization error: Bad template function '$function' to register_template_function\(\), expected sub ref or 'function_sugar'ed sub ref, got: 'you were expecting an arrayref or coderef\?' at .*Template.*Sandbox\.pm line/,
     'error on scalar definition in post-construct function';
 
 #

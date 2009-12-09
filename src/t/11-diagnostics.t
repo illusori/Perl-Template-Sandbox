@@ -36,7 +36,7 @@ sub warns_ok( &$$ )
 $message = 'test post-init error instance method';
 $template = Template::Sandbox->new();
 throws_ok { $template->error( $message ); }
-    qr/Template post-initialization error: $message at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template post-initialization error: $message at .*Template.*Sandbox\.pm line/,
     'post-init error instance method';
 
 #
@@ -44,7 +44,7 @@ throws_ok { $template->error( $message ); }
 $message = 'test post-compile error instance method';
 $template->set_template_string( '' );
 throws_ok { $template->error( $message ); }
-    qr/Template error: $message at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template error: $message at .*Template.*Sandbox\.pm line/,
     'post-compile error instance method';
 
 #
@@ -52,14 +52,14 @@ throws_ok { $template->error( $message ); }
 $message = 'test post-run error instance method';
 $template->run();
 throws_ok { $template->error( $message ); }
-    qr/Template error: $message at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template error: $message at .*Template.*Sandbox\.pm line/,
     'post-run error instance method';
 
 #
 #  4:  error class method
 $message = 'test error class method';
 throws_ok { Template::Sandbox->error( $message ); }
-    qr/Template error: $message at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template error: $message at .*Template.*Sandbox\.pm line/,
     'error class method';
 
 #
@@ -67,7 +67,7 @@ throws_ok { Template::Sandbox->error( $message ); }
 $message = 'test post-init warning instance method';
 $template = Template::Sandbox->new();
 warns_ok { $template->warning( $message ); }
-    qr/Template post-initialization error: $message at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template post-initialization error: $message at .*Template.*Sandbox\.pm line/,
     'post-init warning instance method';
 
 #
@@ -75,7 +75,7 @@ warns_ok { $template->warning( $message ); }
 $message = 'test post-compile warning instance method';
 $template->set_template_string( '' );
 warns_ok { $template->warning( $message ); }
-    qr/Template error: $message at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template error: $message at .*Template.*Sandbox\.pm line/,
     'post-compile warning instance method';
 
 #
@@ -83,14 +83,14 @@ warns_ok { $template->warning( $message ); }
 $message = 'test post-run warning instance method';
 $template->run();
 warns_ok { $template->warning( $message ); }
-    qr/Template error: $message at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template error: $message at .*Template.*Sandbox\.pm line/,
     'post-run warning instance method';
 
 #
 #  8:  warning class method
 $message = 'test warning class method';
 warns_ok { Template::Sandbox->warning( $message ); }
-    qr/Template error: $message at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template error: $message at .*Template.*Sandbox\.pm line/,
     'warning class method';
 
 #
@@ -98,7 +98,7 @@ warns_ok { Template::Sandbox->warning( $message ); }
 $message = 'test post-init error instance method';
 $template = Template::Sandbox->new();
 throws_ok { $template->caller_error( $message ); }
-    qr/Template post-initialization error: $message at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template post-initialization error: $message at .*Template.*Sandbox\.pm line/,
     'caller_error instance method';
 
 #
@@ -106,7 +106,7 @@ throws_ok { $template->caller_error( $message ); }
 $message = 'test post-init warning instance method';
 $template = Template::Sandbox->new();
 warns_ok { $template->caller_warning( $message ); }
-    qr/Template post-initialization error: $message at [^\s]*\/11-diagnostics\.t line/,
+    qr/Template post-initialization error: $message at .*11-diagnostics\.t line/,
     'caller_warning instance method';
 
 #
@@ -125,7 +125,7 @@ $template = Template::Sandbox->new(
     logger => undef,
     );
 throws_ok { $template->error( $message ); }
-    qr/Template post-initialization error: $message at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template post-initialization error: $message at .*Template.*Sandbox\.pm line/,
     'post-init error instance method with undef logger';
 
 #
@@ -135,5 +135,5 @@ $template = Template::Sandbox->new(
     logger => undef,
     );
 warns_ok { $template->warning( $message ); }
-    qr/Template post-initialization error: $message at [^\s]*\/Template\/Sandbox\.pm line/,
+    qr/Template post-initialization error: $message at .*Template.*Sandbox\.pm line/,
     'post-init warning instance method with undef logger';
