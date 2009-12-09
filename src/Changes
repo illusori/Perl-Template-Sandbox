@@ -1,5 +1,12 @@
 Revision history for Template::Sandbox
 
+1.01_03 Version released at 2009-12-09-22:19.  *** Development version. ***
+        Version started at  2009-12-09-20:14.
+        Knew those unixy file paths in the tests' error-match regexps
+        would bite me eventually:
+            made the error text tests properly OS-agnostic.
+        Remembered to update coverage stats this time.
+
 1.01_02 Version released at 2009-12-08-12:38.  *** Development version. ***
         Version started at  2009-12-08-08:29.
         Release focus: optimizing the compile and optimization phases.
