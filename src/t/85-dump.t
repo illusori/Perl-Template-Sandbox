@@ -42,6 +42,9 @@ variable if false
 <: for x in a :>
 for loop contents
 <: endfor :>
+<: for x in a :>
+second loop, run <: expr x.__counter__ :>
+<: endfor :>
 literal end
 END_OF_SYNTAX
 
@@ -57,10 +60,16 @@ $expected = <<'END_OF_EXPECTED';
 0008: [template-string       10  17][jump        ] 10
 0009: [template-string       10  27][literal     ] "variable if false\n"
 0010: [template-string       12  29][literal     ] ""
-0011: [template-string       13   1][for         ] x in [104,"a",["a"],["a"]] then 14
+0011: [template-string       13   1][for         ] x in [104,"a",["a"],["a"]] then 14 (no special-vars)
 0012: [template-string       13  17][literal     ] "for loop contents\n"
 0013: [template-string       15  18][end_for     ] x in [104,"a",["a"],["a"]] repeat 12
-0014: [template-string       15  30][literal     ] "literal end\n"
+0014: [template-string       15  30][literal     ] ""
+0015: [template-string       16   1][for         ] x in [104,"a",["a"],["a"]] then 20
+0016: [template-string       16  17][literal     ] "second loop, run "
+0017: [template-string       17  18][expr        ] [104,"x.__counter__",["x","__counter__"],["x","__counter__"]]
+0018: [template-string       17  42][literal     ] "\n"
+0019: [template-string       18   1][end_for     ] x in [104,"a",["a"],["a"]] repeat 16
+0020: [template-string       18  13][literal     ] "literal end\n"
 END_OF_EXPECTED
 
 $template = Template::Sandbox->new();
