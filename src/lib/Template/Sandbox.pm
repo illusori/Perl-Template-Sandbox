@@ -16,7 +16,6 @@ use warnings;
 use Carp;
 use Class::Handle;
 use Clone;
-use Cwd ();
 use Data::Dumper;
 use Digest;
 use IO::File;
@@ -66,6 +65,35 @@ sub FUNC_ARG_NUM()        { 1; }
 sub FUNC_NEEDS_TEMPLATE() { 2; }
 sub FUNC_INCONST()        { 3; }
 sub FUNC_UNDEF_OK()       { 4; }
+
+#  Special values in loop vars.
+sub LOOP_COUNTER()        { 0; };
+sub LOOP_EVEN()           { 1; };
+sub LOOP_ODD()            { 2; };
+sub LOOP_FIRST()          { 3; };
+sub LOOP_INNER()          { 4; };
+sub LOOP_LAST()           { 5; };
+sub LOOP_PREV()           { 6; };
+sub LOOP_NEXT()           { 7; };
+sub LOOP_VALUE()          { 8; };
+
+my %special_values_names = (
+    __counter__ => LOOP_COUNTER,
+    __even__    => LOOP_EVEN,
+    __odd__     => LOOP_ODD,
+    __first__   => LOOP_FIRST,
+    __inner__   => LOOP_INNER,
+    __last__    => LOOP_LAST,
+    __prev__    => LOOP_PREV,
+    __next__    => LOOP_NEXT,
+    __value__   => LOOP_VALUE,
+    );
+
+sub LOOP_STACK_COUNTER()  { 0; }
+sub LOOP_STACK_SET()      { 1; }
+sub LOOP_STACK_HASH()     { 2; }
+sub LOOP_STACK_CONTEXT()  { 3; }
+sub LOOP_STACK_SPECIALS() { 4; }
 
 #  The lower the weight the tighter it binds.
 my %operators = (
@@ -480,7 +508,7 @@ BEGIN
 {
     use Exporter   ();
 
-    $Template::Sandbox::VERSION     = '1.01_03';
+    $Template::Sandbox::VERSION     = '1.01_04';
     @Template::Sandbox::ISA         = qw( Exporter );
 
     @Template::Sandbox::EXPORT      = qw();
@@ -906,7 +934,7 @@ sub set_template
     $self->{ special_values } = {};
     delete $self->{ template };
 
-    $self->{ filename }    = $self->find_template( $filename, Cwd::cwd() );
+    $self->{ filename }    = $self->find_template( $filename );
     $defines->{ FILENAME } = $self->{ filename };
 
     if( $self->{ cache } )
@@ -1695,7 +1723,7 @@ sub _compile_template
                 push @compiled,
                     [ FOR, $pos, undef, $iterator,
                       $self->_compile_expression( $set ),
-                      $args ];
+                      $args, 1 ];
                 unshift @nest_stack, [ FOR, $#compiled ];
             }
             elsif( $token eq 'endfor' )
@@ -1897,8 +1925,8 @@ sub _compile_template
 sub _optimize_template
 {
     my ( $self, $template ) = @_;
-    my ( $program, @nest_stack, %deletes, @function_table, %function_index,
-         %jump_targets );
+    my ( $program, @nest_stack, %deletes,  %jump_targets, @loop_blocks );
+#    my ( @function_table, %function_index );
 
     #  Optimization pass:
     #    TODO: unroll constant low-count fors?
@@ -2019,6 +2047,91 @@ sub _optimize_template
     $self->_delete_instr( $program, keys( %deletes ) ) if %deletes;
 
     #  TODO: look for loops that make no use of special loop vars.
+    @loop_blocks = ();
+    for( my $i = 0; $i <= $#{$program}; $i++ )
+    {
+        #  Are we a for statement?
+        next if $program->[ $i ]->[ 0 ] != FOR;
+        push @loop_blocks,
+            [ $i, $program->[ $i ]->[ 2 ], $program->[ $i ]->[ 3 ] ];
+    }
+    #  TODO: this should be moved into the above loop to keep it single-pass.
+    foreach my $block ( @loop_blocks )
+    {
+        my ( $special_vars_needed );
+
+        $special_vars_needed = 0;
+        FORBLOCK: for( my $i = $block->[ 0 ] + 1; $i < $block->[ 1 ]; $i++ )
+        {
+            my ( $line, @exprs );
+
+            $line = $program->[ $i ];
+            if( $line->[ 0 ] == EXPR )
+            {
+                @exprs = ( $line->[ 2 ] );
+            }
+            elsif( $line->[ 0 ] == FOR )
+            {
+                @exprs = ( $line->[ 4 ] );
+            }
+            elsif( $line->[ 0 ] == JUMP_IF )
+            {
+                @exprs = ( $line->[ 3 ] );
+            }
+            elsif( $line->[ 0 ] == CONTEXT_PUSH )
+            {
+                @exprs = values( %{$line->[ 2 ]} );
+            }
+
+            next unless @exprs;
+
+            while( my $expr = shift( @exprs ) )
+            {
+                my ( $type );
+
+                $type = $expr->[ 0 ];
+                if( $type == VAR )
+                {
+                    my ( $segments );
+
+                    $segments = $expr->[ 2 ];
+                    #  Needs to have two or more segments.
+                    next unless $#{$segments} > 0;
+                    #  Top stem isn't our loop var, we're not interested.
+                    next unless $segments->[ 0 ] eq $block->[ 2 ];
+
+                    #  OK, it's refering to our loop var, is it a special?
+                    if( ref( $segments->[ 1 ] ) or
+                        exists( $special_values_names{ $segments->[ 1 ] } ) )
+                    {
+                        #  Yes, it's either a special or an inconstant
+                        #  expression subscript that we can't rule out
+                        #  as evaluating to a special at runtime.
+                        $special_vars_needed = 1;
+                        last FORBLOCK;
+                    }
+                }
+                elsif( $type == OP_TREE )
+                {
+                    push @exprs, $expr->[ 3 ], $expr->[ 4 ];
+                }
+                elsif( $type == UNARY_OP )
+                {
+                    push @exprs, $expr->[ 3 ];
+                }
+                elsif( $type == FUNC )
+                {
+                    push @exprs, @{$expr->[ 3 ]};
+                }
+                elsif( $type == METHOD )
+                {
+                    push @exprs, @{$expr->[ 4 ]};
+                }
+            }
+        }
+        $program->[ $block->[ 0 ] ]->[ 6 ] = 0 unless $special_vars_needed;
+    }
+
 
 #    #  walk program looking for functions, adding to function table.
 #    #  NOTE: turned out to not make a difference in run-time, but may revisit.
@@ -2637,11 +2750,12 @@ sub _eval_var
     #  Check to see if it's a special loop variable or something.
     if( $last >= 1 and
         $self->{ special_values }->{ $stem } and
-        exists( $self->{ special_values }->{ $stem }->{ $segments->[ 1 ] } ) )
+        exists( $special_values_names{ $segments->[ 1 ] } ) )
     {
         #  Don't bother checking that the leaf isn't a ref, it won't
         #  match a key and saves on a ref() call when it isn't.
-        $val = $self->{ special_values }->{ $stem }->{ $segments->[ 1 ] };
+        $val = $self->{ special_values }->{ $stem }->[
+            $special_values_names{ $segments->[ 1 ] } ];
         $i = 2;
     }
     else
@@ -2675,9 +2789,10 @@ sub _eval_var
             if( $i == 1 )
             {
                 if( $self->{ special_values }->{ $stem } and
-                    exists( $self->{ special_values }->{ $stem }->{ $leaf } ) )
+                    exists( $special_values_names{ $leaf } ) )
                 {
-                    $val = $self->{ special_values }->{ $stem }->{ $leaf };
+                    $val = $self->{ special_values }->{ $stem }->[
+                        $special_values_names{ $leaf } ];
                     next;
                 }
             }
@@ -2871,10 +2986,11 @@ sub run
         }
         elsif( $instr == FOR )
         {
-            my ( $iterator, $set, $set_value, $hash, $last );
+            my ( $iterator, $set, $set_value, $hash, $last, $specials_needed );
 
-            $iterator = $line->[ 3 ];
-            $set      = $line->[ 4 ];
+            $iterator        = $line->[ 3 ];
+            $set             = $line->[ 4 ];
+            $specials_needed = $line->[ 6 ];
 
             $set_value = $self->_eval_expression( $set, 1 );
             $set_value = [] unless defined $set_value;
@@ -2901,22 +3017,20 @@ sub run
                 my ( $value, $context );
 
                 $value = $set_value->[ 0 ];
-                #  TODO: optimization to only set special vars if used
                 $special_values->{ $iterator } =
-                    {
-                        __counter__ => 0,
-                        __even__    => 1,
-                        __odd__     => 0,
-                        __first__   => 1,
-                        __inner__   => 0,
-                        __last__    => $last == 0 ? 1 : 0,
-                        __prev__    => undef,
-                        __next__    => $last == 0 ?
-                                       undef : $set_value->[ 1 ],
-                    };
-                $special_values->{ $iterator }->{ __value__ } =
-                    $hash->{ $value }
-                    if $hash;
+                    [
+                        0,
+                        1,
+                        0,
+                        1,
+                        0,
+                        $last == 0 ? 1 : 0,
+                        undef,
+                        $last == 0 ?
+                            undef : $set_value->[ 1 ],
+                        $hash ? $hash->{ $value } : undef,
+                    ]
+                    if $specials_needed;
                 #  Optimization: only create a new context if needed.
                 if( $var_stack[ 0 ]->{ $iterator } )
                 {
@@ -2928,43 +3042,45 @@ sub run
                 {
                     $var_stack[ 0 ]->{ $iterator } = $value;
                 }
-                unshift @for_stack, [ 0, $set_value, $hash, $context ? 0 : 1 ];
+                unshift @for_stack, [
+                    0, $set_value, $hash, $context ? 1 : 0, $specials_needed,
+                    ];
             }
         }
         elsif( $instr == END_FOR )
         {
-            my ( $iterator, $set, $set_value, $counter, $hash, $last );
+            my ( $iterator, $set, $set_value, $counter, $hash, $last,
+                 $specials_needed );
 
             $iterator = $line->[ 3 ];
             $set      = $line->[ 4 ];
 
-            $counter   = $for_stack[ 0 ]->[ 0 ] + 1;
-            $set_value = $for_stack[ 0 ]->[ 1 ];
-            $hash      = $for_stack[ 0 ]->[ 2 ];
-            $last      = $#{$set_value};
+            $counter         = $for_stack[ 0 ]->[ LOOP_STACK_COUNTER ] + 1;
+            $set_value       = $for_stack[ 0 ]->[ LOOP_STACK_SET ];
+            $hash            = $for_stack[ 0 ]->[ LOOP_STACK_HASH ];
+            $specials_needed = $for_stack[ 0 ]->[ LOOP_STACK_SPECIALS ];
+            $last            = $#{$set_value};
 
             if( $counter <= $last )
             {
                 my ( $value );
 
                 $value = $set_value->[ $counter ];
-                #  TODO: optimization to only set special vars if used
                 $special_values->{ $iterator } =
-                    {
-                        __counter__ => $counter,
-                        __even__    => ( $counter % 2 ) ? 0 : 1,
-                        __odd__     => $counter % 2,
-                        __first__   => 0,
-                        __inner__   => $counter == $last ? 0 : 1,
-                        __last__    => $counter == $last ? 1 : 0,
-                        __prev__    => $set_value->[ $counter - 1 ],
-                        __next__    => $counter == $last ?
-                                           undef :
-                                           $set_value->[ $counter + 1 ],
-                    };
-                $special_values->{ $iterator }->{ __value__ } =
-                    $hash->{ $value }
-                    if $hash;
+                    [
+                        $counter,
+                        ( $counter % 2 ) ? 0 : 1,
+                        $counter % 2,
+                        0,
+                        $counter == $last ? 0 : 1,
+                        $counter == $last ? 1 : 0,
+                        $set_value->[ $counter - 1 ],
+                        $counter == $last ?
+                            undef :
+                            $set_value->[ $counter + 1 ],
+                        $hash ? $hash->{ $value } : undef,
+                    ]
+                    if $specials_needed;
 
                 $var_stack[ 0 ]->{ $iterator } = $value;
 
@@ -2974,13 +3090,13 @@ sub run
             }
             else
             {
-                if( $for_stack[ 0 ]->[ 3 ] )
+                if( $for_stack[ 0 ]->[ LOOP_STACK_CONTEXT ] )
                 {
-                    delete $var_stack[ 0 ]->{ $iterator };
+                    shift @var_stack;
                 }
                 else
                 {
-                    shift @var_stack;
+                    delete $var_stack[ 0 ]->{ $iterator };
                 }
                 shift @for_stack;
                 delete $special_values->{ $iterator };
@@ -3105,7 +3221,9 @@ sub dumpable_template
         elsif( $instr == FOR )
         {
             $ret .= "$line->[ 3 ] in " . _tinydump( $line->[ 4 ] ) .
-                " then $line->[ 2 ]\n";
+                " then $line->[ 2 ]";
+            $ret .= " (no special-vars)" unless $line->[ 6 ];
+            $ret .= "\n";
         }
         elsif( $instr == END_FOR )
         {
@@ -5243,6 +5361,46 @@ Template function array indices:
 =item FUNC_INCONST
 
 =item FUNC_UNDEF_OK
+
+=back
+
+Special loop variable array indices:
+
+=over
+
+=item LOOP_COUNTER
+
+=item LOOP_EVEN
+
+=item LOOP_ODD
+
+=item LOOP_FIRST
+
+=item LOOP_INNER
+
+=item LOOP_LAST
+
+=item LOOP_PREV
+
+=item LOOP_NEXT
+
+=item LOOP_VALUE
+
+=back
+
+For loop stack array indices:
+
+=over
+
+=item LOOP_STACK_COUNTER
+
+=item LOOP_STACK_SET
+
+=item LOOP_STACK_HASH
+
+=item LOOP_STACK_CONTEXT
+
+=item LOOP_STACK_SPECIALS
 
 =back
 
