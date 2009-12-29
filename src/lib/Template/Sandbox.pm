@@ -5545,6 +5545,11 @@ dir, they basically query C<< $template->get_template_candidates() >>
 or C<< $template->get_include_candidates() >> and then traverse the
 list looking for a file that exists.
 
+B<COMPAT NOTE>: I<$current_dir> will be undef in most cases when
+C<find_template> is called, previous versions passed C<Cwd::cwd()> in,
+however this imposed dramatic performance penalties if you didn't
+need it.
+
 =item B<< $template->cache_key( >> I<$keys> B<)>
 
 Takes a hashref of parameters that uniquely identify the factors that
