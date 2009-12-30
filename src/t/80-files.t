@@ -12,7 +12,7 @@ use Cwd ();
 use Template::Sandbox;
 use Test::Exception;
 
-plan tests => 20;
+plan tests => 23;
 
 my ( $template, $template_root, $template_file, $expected );
 
@@ -294,6 +294,55 @@ SKIP:
     #  TODO: should probably try to restore to previous setting.
     chmod 0644, $unreadable_file;
 }
+
+#
+#  21: for loop with nested plain include
+$template_file = 'for_include_plain.txt';
+$template_file = File::Spec->catfile( $template_root, $template_file );
+$template = Template::Sandbox->new();
+$template->set_template( $template_file );
+$expected = <<END_OF_EXPECTED;
+Starting the for loop.
+For loop contents.
+For loop contents.
+For loop contents.
+For loop contents.
+Ending the for loop.
+END_OF_EXPECTED
+is( ${$template->run()}, $expected, 'for loop nested plain include' );
+
+#
+#  22: for loop with nested include using special vars
+$template_file = 'for_include_special_vars.txt';
+$template_file = File::Spec->catfile( $template_root, $template_file );
+$template = Template::Sandbox->new();
+$template->set_template( $template_file );
+$expected = <<END_OF_EXPECTED;
+Starting the for loop.
+For loop contents: 0.
+For loop contents: 1.
+For loop contents: 2.
+For loop contents: 3.
+Ending the for loop.
+END_OF_EXPECTED
+is( ${$template->run()}, $expected, 'for loop nested include using special vars' );
+
+#
+#  23: for loop with nested include using special vars in the context
+$template_file = 'for_include_special_vars_context.txt';
+$template_file = File::Spec->catfile( $template_root, $template_file );
+$template = Template::Sandbox->new();
+$template->set_template( $template_file );
+$expected = <<END_OF_EXPECTED;
+Starting the for loop.
+For loop contents: 0.
+For loop contents: 1.
+For loop contents: 1.
+For loop contents: 0.
+Ending the for loop.
+END_OF_EXPECTED
+is( ${$template->run()}, $expected, 'for loop nested plain using special vars in context' );
+
 
 
 #  TODO: if-constructs that are partly in one file and another.
