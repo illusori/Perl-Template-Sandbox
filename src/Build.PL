@@ -20,7 +20,6 @@ my $build = Module::Build->new(
         'Carp'             => 0,
         'Class::Handle'    => 0,
         'Clone'            => 0,
-        'Cwd'              => 0,
         'Data::Dumper'     => 0,
         'Digest'           => 0,
         'Digest::MD5'      => 0,
