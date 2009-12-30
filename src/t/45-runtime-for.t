@@ -7,7 +7,7 @@ use Test::More;
 
 use Template::Sandbox;
 
-plan tests => 32;
+plan tests => 37;
 
 my ( $template, $syntax );
 
@@ -256,3 +256,71 @@ $template->add_var( y =>
 $template->set_template_string( $syntax );
 is( ${$template->run()}, 'one => (oneone => ONEONE,onetwo => ONETWO,) three => (threeone => THREEXXX,threetwo => THREEYYY,) two => (twoone => TWOAAA,) ',
     'loop-var expr subscript of outer loop-var special-value' );
+
+#
+#  33: Ensure op-tree special vars aren't optimized away.
+$syntax = "<: for x in 4 :><: expr ( x.__counter__ + 1 ) :><: endfor :>";
+$template = Template::Sandbox->new();
+$template->set_template_string( $syntax );
+is( ${$template->run()}, '12345',
+    'special vars in op-trees are recognised' );
+
+#
+#  34: Ensure unary-op special vars aren't optimized away.
+$syntax = "<: for x in 4 :><: expr -x.__counter__ :><: endfor :>";
+$template = Template::Sandbox->new();
+$template->set_template_string( $syntax );
+is( ${$template->run()}, '0-1-2-3-4',
+    'special vars in unary-ops are recognised' );
+
+#
+#  35: Ensure function argument special vars aren't optimized away.
+$syntax = "<: for x in 4 :><: expr defined( x.__counter__ ) :><: endfor :>";
+$template = Template::Sandbox->new();
+$template->set_template_string( $syntax );
+is( ${$template->run()}, '11111',
+    'special vars in function arguments are recognised' );
+
+#
+#  36: Ensure method argument special vars aren't optimized away.
+$syntax = "<: for x in 4 :><: expr testob.permitted_method_with_args( x.__counter__ ) :><: endfor :>";
+$template = Template::Sandbox->new();
+$template->add_var( testob => Template::Sandbox::TestMethodObject->new() );
+$template->set_template_string( $syntax );
+is( ${$template->run()},
+    "args: 0\nargs: 1\nargs: 2\nargs: 3\nargs: 4\n",
+    'special vars in method arguments are recognised' );
+
+#
+#  37: Ensure expr subscript special vars aren't optimized away.
+$syntax = "<: for x in 4 :><: expr x[ y ] :><: endfor :>";
+$template = Template::Sandbox->new();
+$template->add_var( y => '__counter__' );
+$template->set_template_string( $syntax );
+is( ${$template->run()}, '01234',
+    'inconstant expr-subscript special vars are recognised' );
+
+package Template::Sandbox::TestMethodObject;
+
+sub new
+{
+    my ( $this ) = @_;
+    return( bless {}, $this );
+}
+
+sub valid_template_method
+{
+    my ( $self, $method ) = @_;
+
+    return( 1 ) if $method eq 'permitted_method_with_args';
+    return( 0 );
+}
+
+sub permitted_method_with_args
+{
+    my $self = shift;
+
+    return( 'args: ' . join( ', ', @_ ) . "\n" );
+}
+
+1;
