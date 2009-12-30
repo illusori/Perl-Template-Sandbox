@@ -1,5 +1,17 @@
 Revision history for Template::Sandbox
 
+1.01_04 Version released at 2009-12-30-07:11.  *** Development version. ***
+        Version started at  2009-12-29-11:14.
+        COMPAT BUSTER: $current_dir no-longer defaults to Cwd::cwd() when
+            find_template() is called, instead an undef value will be passed:
+            if you need the cwd you can work it out yourself. :)
+        Store special loop vars as array rather than hash.
+        Only build special loop vars if any are needed by loop.
+        Added tests for special loop var optimizations.
+        Added tests for subscript access of special vars. (var['__prev__']).
+        Added "case-study" style snippets to caching documentation.
+        Added benchmark dump to performance section.
+
 1.01_03 Version released at 2009-12-09-22:19.  *** Development version. ***
         Version started at  2009-12-09-20:14.
         Knew those unixy file paths in the tests' error-match regexps
