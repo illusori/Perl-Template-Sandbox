@@ -508,7 +508,7 @@ BEGIN
 {
     use Exporter   ();
 
-    $Template::Sandbox::VERSION     = '1.01_04';
+    $Template::Sandbox::VERSION     = '1.01_05';
     @Template::Sandbox::ISA         = qw( Exporter );
 
     @Template::Sandbox::EXPORT      = qw();
@@ -4076,7 +4076,7 @@ functions> with the current template.
 
 By default only three functions are registered, those three are needed
 for internal behaviour of certain I<special variables> and for the test
-suite, it is part of L<Template::Sandbox>>'s core philosophy that, like
+suite, it is part of L<Template::Sandbox>'s core philosophy that, like
 template variables, you must explicitly grant access to more than this
 if you wish to do so.
 
@@ -5036,11 +5036,12 @@ details on configuring cache objects.
 
 Being able to pass in your own cache object to L<Template::Sandbox>
 allows you to choose a cache that truly fits your needs, and to make
-use of some of the great caching modules on CPAN, choosing the right
-caching module can gain you large performance advantage over the
-in-built caching methods of many other template systems, here's some
-example situations with code-snippets to generate a suitable cache for
-it.
+use of some of the great caching modules on CPAN.
+
+Choosing the right caching module can gain you large performance
+advantage over the in-built caching methods of many other template
+systems, here's some example situations with code-snippets to generate
+a suitable cache for it.
 
 =head2 In-memory cache, per process
 
@@ -5077,9 +5078,11 @@ memory is no issue.  (We can all dream, right?)
       ),
 
 Sick of multi-gajillion megabyte apache processes, but still want the
-speed of a memory cache?  L<Cache::FastMmap> is for you, it'll store
-the compiled templates in a file accessed via C<mmap()> for blistering
-speed.  You lose somewhere around 20% performance compared to using
+speed of a memory cache?
+
+L<Cache::FastMmap> is for you, it'll store the compiled templates
+in a file accessed via C<mmap()> for blistering speed.
+You lose somewhere around 20% performance compared to using
 C<Cache::FastMemory>, but if multiple processes are using the same
 template you'll have fewer cache-misses and use a lot less memory.
 
@@ -5099,9 +5102,9 @@ C<mod_perl> environment.
       validity => 'lastmodified',
       );
 
-If you're not so fussed about performance of repeated template use
-within a process, but want subsequent process to not take the hit
-of having to compile each time, an on-disk cache is what you need.
+If you're not so fussed about the performance of repeated template use
+within a process, but want subsequent processes to not take the hit
+of having to compile each time, then an on-disk cache is what you need.
 
 This is probably what you want if you're running in a CGI environment.
 
@@ -5363,12 +5366,40 @@ is always better, especially one so lightweight as C<LITERAL> where the
 overhead of running the instruction is disproportional to the actual
 work entailed in the instruction itself.
 
+=item Special Loop Variable Pruning
+
+Each loop is analyzed to see if the special loop variables are used
+within that loop and if not a flag is set against that loop to indicate
+it should skip creating them.
+
+This is an all-or-nothing affair, use of any C<__inner__>, C<__counter__>,
+etc special variable will cause them all to be created for that loop.
+
+Note that this has nothing to do with access to the loop variable itself.
+For example, this will optimize:
+
+  <: for x in 5 :><: expr x :><: endfor :>
+
+Whereas, this will not:
+
+  <: for x in 5 :><: expr x.__inner__ :><: endfor :>
+
+Also note that any non-constant-folded expression subscript against
+the loop variable cannot be analysed at runtime, so causes the special
+variables to be created just in case.
+So, this will not optimize, even if z isn't set to the name of a
+special variable:
+
+  <: for x in y :><: expr x[ z ] :><: endfor :>
+
+The gain per loop is only on the order of 20 microseconds, so really
+don't stress yourself too much about reaching for this optimization
+if you're doing anything much at all within the body of the loop.
+
 =back
 
 There are several further candidates for optimizations on the TODO list,
-the most important is probably optimizing away the creation of special
-loop variables for a loop if they're not needed. A nice side effect of
-this would be that the code would be reusable to make the C<for> loop
+the most important is probably to make the C<for> loop
 context-folding occur in the optimization sweep rather than at run-time.
 
 =head2 Template Program Execution
@@ -5707,8 +5738,85 @@ here's the data.
   TA_NOCACHE: 32 wallclock secs (31.58 usr +  0.00 sys = 31.58 CPU) @ 63.14/s (n=1994)
         TMPL: 32 wallclock secs (31.72 usr +  0.07 sys = 31.79 CPU) @ 1297.92/s (n=41261)
           TS: 32 wallclock secs (31.62 usr +  0.00 sys = 31.62 CPU) @ 37.00/s (n=1170)
-         2%  -28% -47% -47% -57%  -62%   -63%     -64%   -66% -95%
-  HT       87.7/s   63%   38%   29%    --   -7% -31% -32% -45%  -51%   -52%     -53%   -
+          TT: 31 wallclock secs (31.45 usr +  0.07 sys = 31.52 CPU) @ 17.13/s (n=540)
+         TTX: 31 wallclock secs (31.46 usr +  0.07 sys = 31.53 CPU) @ 18.01/s (n=568)
+      TTXCET: 31 wallclock secs (31.47 usr +  0.00 sys = 31.47 CPU) @ 32.60/s (n=1026)
+  TextTemplate: 32 wallclock secs (31.63 usr +  0.00 sys = 31.63 CPU) @ 58.93/s (n=1864)
+                Rate    HTC    HTE     TT    TTX TTXCET    TS    HT TextTemplate TA_NOCACHE TA_H_NOCACHE    TA  TA_H TMPL   HTP
+  HTC          11.5/s     --   -13%   -33%   -36%   -65%  -69%  -78%         -80%       -82%         -86%  -93%  -94% -99% -100%
+  HTE          13.2/s    14%     --   -23%   -27%   -60%  -64%  -74%         -78%       -79%         -83%  -92%  -93% -99% -100%
+  TT           17.1/s    49%    30%     --    -5%   -47%  -54%  -67%         -71%       -73%         -79%  -89%  -91% -99%  -99%
+  TTX          18.0/s    56%    37%     5%     --   -45%  -51%  -65%         -69%       -71%         -77%  -88%  -91% -99%  -99%
+  TTXCET       32.6/s   183%   148%    90%    81%     --  -12%  -36%         -45%       -48%         -59%  -79%  -84% -97%  -99%
+  TS           37.0/s   221%   181%   116%   105%    13%    --  -28%         -37%       -41%         -54%  -76%  -81% -97%  -99%
+  HT           51.3/s   346%   290%   199%   185%    57%   39%    --         -13%       -19%         -36%  -67%  -74% -96%  -98%
+  TextTemplate 58.9/s   412%   348%   244%   227%    81%   59%   15%           --        -7%         -26%  -62%  -70% -95%  -98%
+  TA_NOCACHE   63.1/s   448%   380%   269%   251%    94%   71%   23%           7%         --         -21%  -59%  -68% -95%  -98%
+  TA_H_NOCACHE 79.7/s   592%   505%   365%   343%   145%  115%   55%          35%        26%           --  -49%  -60% -94%  -97%
+  TA            155/s  1248%  1079%   806%   762%   376%  320%  203%         163%       146%          95%    --  -22% -88%  -94%
+  TA_H          198/s  1623%  1407%  1058%  1001%   508%  436%  287%         237%       214%         149%   28%    -- -85%  -93%
+  TMPL         1298/s 11172%  9758%  7476%  7105%  3881% 3408% 2430%        2102%      1956%        1528%  736%  554%   --  -52%
+  HTP          2719/s 23516% 20554% 15773% 14995%  8241% 7249% 5201%        4514%      4207%        3311% 1652% 1271% 110%    --
+  ---FILE-----------------------------------------------------------------
+  Compiled and cached on the file system tests
+  Benchmark: running HT, HTC, TA, TA_H, TA_P, TA_S, TMPL, TS_CF, TS_CHI, TS_CHIMM, TS_CMM, TT, TTX for at least 30 CPU seconds...
+          HT: 32 wallclock secs (31.49 usr +  0.13 sys = 31.62 CPU) @ 87.67/s (n=2772)
+         HTC: 33 wallclock secs (31.91 usr +  0.25 sys = 32.16 CPU) @ 94.34/s (n=3034)
+          TA: 32 wallclock secs (31.26 usr +  0.19 sys = 31.45 CPU) @ 127.92/s (n=4023)
+        TA_H: 32 wallclock secs (31.27 usr +  0.22 sys = 31.49 CPU) @ 159.54/s (n=5024)
+        TA_P: 31 wallclock secs (31.30 usr +  0.19 sys = 31.49 CPU) @ 67.96/s (n=2140)
+        TA_S: 31 wallclock secs (31.26 usr +  0.17 sys = 31.43 CPU) @ 128.79/s (n=4048)
+        TMPL: 32 wallclock secs (30.89 usr +  0.71 sys = 31.60 CPU) @ 1248.20/s (n=39443)
+       TS_CF: 32 wallclock secs (31.08 usr +  0.47 sys = 31.55 CPU) @ 179.65/s (n=5668)
+      TS_CHI: 32 wallclock secs (31.21 usr +  0.43 sys = 31.64 CPU) @ 184.45/s (n=5836)
+    TS_CHIMM: 32 wallclock secs (31.45 usr +  0.14 sys = 31.59 CPU) @ 187.50/s (n=5923)
+      TS_CMM: 31 wallclock secs (31.44 usr +  0.10 sys = 31.54 CPU) @ 198.80/s (n=6270)
+          TT: 31 wallclock secs (31.41 usr +  0.19 sys = 31.60 CPU) @ 53.83/s (n=1701)
+         TTX: 32 wallclock secs (31.36 usr +  0.25 sys = 31.61 CPU) @ 63.68/s (n=2013)
+             Rate    TT   TTX  TA_P    HT   HTC   TA TA_S TA_H TS_CF TS_CHI TS_CHIMM TS_CMM TMPL
+  TT       53.8/s    --  -15%  -21%  -39%  -43% -58% -58% -66%  -70%   -71%     -71%   -73% -96%
+  TTX      63.7/s   18%    --   -6%  -27%  -32% -50% -51% -60%  -65%   -65%     -66%   -68% -95%
+  TA_P     68.0/s   26%    7%    --  -22%  -28% -47% -47% -57%  -62%   -63%     -64%   -66% -95%
+  HT       87.7/s   63%   38%   29%    --   -7% -31% -32% -45%  -51%   -52%     -53%   -56% -93%
+  HTC      94.3/s   75%   48%   39%    8%    -- -26% -27% -41%  -47%   -49%     -50%   -53% -92%
+  TA        128/s  138%  101%   88%   46%   36%   --  -1% -20%  -29%   -31%     -32%   -36% -90%
+  TA_S      129/s  139%  102%   90%   47%   37%   1%   -- -19%  -28%   -30%     -31%   -35% -90%
+  TA_H      160/s  196%  151%  135%   82%   69%  25%  24%   --  -11%   -14%     -15%   -20% -87%
+  TS_CF     180/s  234%  182%  164%  105%   90%  40%  39%  13%    --    -3%      -4%   -10% -86%
+  TS_CHI    184/s  243%  190%  171%  110%   96%  44%  43%  16%    3%     --      -2%    -7% -85%
+  TS_CHIMM  187/s  248%  194%  176%  114%   99%  47%  46%  18%    4%     2%       --    -6% -85%
+  TS_CMM    199/s  269%  212%  193%  127%  111%  55%  54%  25%   11%     8%       6%     -- -84%
+  TMPL     1248/s 2219% 1860% 1737% 1324% 1223% 876% 869% 682%  595%   577%     566%   528%   --
+  ---MEM------------------------------------------------------------------
+  Cached in memory tests
+  Benchmark: running HT, HTC, HTE, HTJ, HTP, TA, TA_H, TA_P, TA_PS, TS_CF, TS_CHI, TT, TTX for at least 30 CPU seconds...
+          HT: 32 wallclock secs (31.43 usr +  0.05 sys = 31.48 CPU) @ 96.09/s (n=3025)
+         HTC: 32 wallclock secs (31.41 usr +  0.01 sys = 31.42 CPU) @ 1821.64/s (n=57236)
+         HTE: 31 wallclock secs (31.36 usr +  0.01 sys = 31.37 CPU) @ 15.21/s (n=477)
+         HTJ: 31 wallclock secs (30.69 usr +  0.79 sys = 31.48 CPU) @ 3624.62/s (n=114103)
+         HTP: 31 wallclock secs (28.95 usr +  2.21 sys = 31.16 CPU) @ 2612.48/s (n=81405)
+          TA: 32 wallclock secs (31.55 usr +  0.01 sys = 31.56 CPU) @ 156.37/s (n=4935)
+        TA_H: 31 wallclock secs (31.53 usr +  0.03 sys = 31.56 CPU) @ 198.67/s (n=6270)
+        TA_P: 31 wallclock secs (31.24 usr +  0.03 sys = 31.27 CPU) @ 185.19/s (n=5791)
+       TA_PS: 31 wallclock secs (31.34 usr +  0.04 sys = 31.38 CPU) @ 186.87/s (n=5864)
+       TS_CF: 31 wallclock secs (31.53 usr +  0.02 sys = 31.55 CPU) @ 280.51/s (n=8850)
+      TS_CHI: 32 wallclock secs (31.69 usr +  0.04 sys = 31.73 CPU) @ 204.00/s (n=6473)
+          TT: 31 wallclock secs (31.52 usr +  0.00 sys = 31.52 CPU) @ 148.64/s (n=4685)
+         TTX: 31 wallclock secs (31.58 usr +  0.01 sys = 31.59 CPU) @ 256.60/s (n=8106)
+           Rate    HTE    HT    TT    TA  TA_P TA_PS  TA_H TS_CHI   TTX TS_CF  HTC  HTP   HTJ
+  HTE    15.2/s     --  -84%  -90%  -90%  -92%  -92%  -92%   -93%  -94%  -95% -99% -99% -100%
+  HT     96.1/s   532%    --  -35%  -39%  -48%  -49%  -52%   -53%  -63%  -66% -95% -96%  -97%
+  TT      149/s   878%   55%    --   -5%  -20%  -20%  -25%   -27%  -42%  -47% -92% -94%  -96%
+  TA      156/s   928%   63%    5%    --  -16%  -16%  -21%   -23%  -39%  -44% -91% -94%  -96%
+  TA_P    185/s  1118%   93%   25%   18%    --   -1%   -7%    -9%  -28%  -34% -90% -93%  -95%
+  TA_PS   187/s  1129%   94%   26%   20%    1%    --   -6%    -8%  -27%  -33% -90% -93%  -95%
+  TA_H    199/s  1207%  107%   34%   27%    7%    6%    --    -3%  -23%  -29% -89% -92%  -95%
+  TS_CHI  204/s  1242%  112%   37%   30%   10%    9%    3%     --  -20%  -27% -89% -92%  -94%
+  TTX     257/s  1588%  167%   73%   64%   39%   37%   29%    26%    --   -9% -86% -90%  -93%
+  TS_CF   281/s  1745%  192%   89%   79%   51%   50%   41%    38%    9%    -- -85% -89%  -92%
+  HTC    1822/s 11880% 1796% 1126% 1065%  884%  875%  817%   793%  610%  549%   -- -30%  -50%
+  HTP    2612/s 17081% 2619% 1658% 1571% 1311% 1298% 1215%  1181%  918%  831%  43%   --  -28%
+  HTJ    3625/s 23737% 3672% 2339% 2218% 1857% 1840% 1724%  1677% 1313% 1192%  99%  39%    --
 
 As can be seen from the results, L<Template::Sandbox> benefits
 massively from using external caching modules when it comes to
@@ -6056,6 +6164,13 @@ L<http://cpanratings.perl.org/d/Template-Sandbox>
 L<http://search.cpan.org/dist/Template-Sandbox>
 
 =back
+
+=head1 THANKS
+
+Thanks to Paul Seamons for creating the benchmark script distributed
+with L<Template::Alloy>, the benchmarks in the
+L</"PERFORMANCE CONSIDERATIONS AND METRICS"> section were generated
+with a modified version of this script.
 
 =head1 AUTHORS
 
