@@ -1,5 +1,10 @@
 Revision history for Template::Sandbox
 
+1.01_05 Version released at 2009-12-30-10:31.  *** Development version. ***
+        Version started at  2009-12-30-09:55.
+        Typo fixed in the new documentation.
+        Helps if I don't accidentally delete half the benchmark listing too.
+
 1.01_04 Version released at 2009-12-30-07:11.  *** Development version. ***
         Version started at  2009-12-29-11:14.
         COMPAT BUSTER: $current_dir no-longer defaults to Cwd::cwd() when
