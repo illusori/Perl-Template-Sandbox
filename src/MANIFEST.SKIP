@@ -9,3 +9,4 @@ CVS
 #defaults
 ^Makefile$
 ^pm_to_blib
+^MYMETA.yml$
