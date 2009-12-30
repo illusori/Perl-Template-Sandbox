@@ -5,6 +5,7 @@ Revision history for Template::Sandbox
         COMPAT BUSTER: $current_dir no-longer defaults to Cwd::cwd() when
             find_template() is called, instead an undef value will be passed:
             if you need the cwd you can work it out yourself. :)
+        Removed dependency on Cwd.
         Store special loop vars as array rather than hash.
         Only build special loop vars if any are needed by loop.
         Added tests for special loop var optimizations.
