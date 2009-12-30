@@ -4949,7 +4949,7 @@ possible to disable I<zero-width folding>.
 Like most template systems L<Template::Sandbox> is heavily optimized for
 speed when a template is run, sometimes at the expense of the time taken
 to compile the template in the first place: currently compilation of a
-template is approximately an order of magnitude slower than running it.
+template is approximately three to four times slower than running it.
 (This is a very rough metric based on my practical experience for a typical
 template: large or small numbers of loops at runtime will sway this figure
 back and forth - they only get compiled once, but run many times.)
@@ -5020,8 +5020,107 @@ Some example code snippets for caching:
       );
   print ${$template->run()};
 
-See L<Cache::Cache> and L<Cache::CacheFactory> for further details on
-configuring cache objects.
+  #  Using CHI
+  $cache = CHI->new(
+      driver  => 'Memory',
+      global  => 1,
+      );
+  $template = Template::Sandbox->new(
+      cache    => $cache,
+      template => 'profile.html',
+      );
+  print ${$template->run()};
+
+See L<Cache::Cache>, L<Cache::CacheFactory> and L<CHI> for further
+details on configuring cache objects.
+
+Being able to pass in your own cache object to L<Template::Sandbox>
+allows you to choose a cache that truly fits your needs, and to make
+use of some of the great caching modules on CPAN, choosing the right
+caching module can gain you large performance advantage over the
+in-built caching methods of many other template systems, here's some
+example situations with code-snippets to generate a suitable cache for
+it.
+
+=head2 In-memory cache, per process
+
+  $cache = Cache::CacheFactory->new(
+        storage       => 'fastmemory',
+        validity      => 'lastmodified',
+        no_deep_clone => 1,
+        );
+
+This builds you a cache that will store the compiled template in-memory
+once per process, the C<'fastmemory'> storage policy provides a fast
+set/get process and the C<no_deep_clone> option turns off cloning of
+the data structure, this is safe because once the template has been
+compiled it's treated in a read-only manner, so there's no need to
+worry about polluting the cache by running it.
+
+The C<'lastmodified'> storage policy causes the dependencies of the
+template to be checked against the cached data, this imposes some
+speed penaltly and can be left out, although if you're planning to
+do that (and not use any of L<Cache::CacheFactory>'s other features),
+you should consider using the L<Cache::FastMemory> module
+directly for additional speed.
+
+This is great to use when you're in a situation where you're using
+a small number of templates repeatedly within each process, or you
+have a long-running process using a large number of templates and
+memory is no issue.  (We can all dream, right?)
+
+=head2 Shared memory cache
+
+  $cache = Cache::FastMmap->new(
+      share_file => "/tmp/somewhere-or-other",
+      cache_size => '100k',
+      ),
+
+Sick of multi-gajillion megabyte apache processes, but still want the
+speed of a memory cache?  L<Cache::FastMmap> is for you, it'll store
+the compiled templates in a file accessed via C<mmap()> for blistering
+speed.  You lose somewhere around 20% performance compared to using
+C<Cache::FastMemory>, but if multiple processes are using the same
+template you'll have fewer cache-misses and use a lot less memory.
+
+Started from within your C<startup.pl> to ensure the memory is shared
+among all server children, this makes a really nice match for a
+C<mod_perl> environment.
+
+=head2 On-disk cache
+
+  $cache = CHI->new(
+      driver   => 'File',
+      root_dir => '/tmp/my-template-cache-dir',
+      );
+
+  $cache = Cache::CacheFactory->new(
+      storage  => { 'file' => { cache_root => '/tmp/cachedir', }, },
+      validity => 'lastmodified',
+      );
+
+If you're not so fussed about performance of repeated template use
+within a process, but want subsequent process to not take the hit
+of having to compile each time, an on-disk cache is what you need.
+
+This is probably what you want if you're running in a CGI environment.
+
+L<CHI> provides a faster disk cache than L<Cache::CacheFactory>, but
+doesn't hook up to the dependencies checking, both are pretty fast and
+are only somewhere in the region of 25-50% of the speed of using
+memory caching.
+
+L<CHI> also requires L<Moose>, so if large dependency chains or
+startup time are an issue for you, it's something to be aware of.
+
+=head2 Multi-level caches
+
+Both L<CHI> and L<Cache::CacheFactory> allow you to set up multi-level
+caches so that you can check a memory cache first, and fetch from a
+disk cache second if the memory cache fails.
+
+That's somewhat outside the scope of this document however, so I suggest
+you read the documentation of the respective modules for details.
 
 =head1 SUBCLASSING Template::Sandbox
 
@@ -5526,8 +5625,153 @@ This is detailed further in L</"KNOWN ISSUES AND BUGS">.
 
 =head2 Metrics
 
-No performance metrics currently, they'll appear at this point in the
-docs when they make their appearance in a future release.
+Here's a dump of some raw metrics from a modified version of
+the L<Template::Alloy> benchmark script.
+
+The script was modified to run for 30 CPU seconds instead of 2,
+and to run a much longer (thirty-times!) template, to
+simulate the heavy-usage situation I was testing for. (My initial
+results showed a somewhat unfair advantage for L<Template::Sandbox>
+because of the use of better caching modules vs the internal
+caching methods of other systems, so I extended the length of the
+template to get a better metric of template-processing performance.)
+
+Also note that the template is a very simple template making little
+use of the advanced features of many of the template systems, since
+not all systems support equivilent features, notably it consists only
+of top-level variable substitutions, loops and literal text.
+
+I make no claims for how representive these numbers are of any
+particular real-world situation, and it should be taken as read
+that I know how to do a better job of optimizing my own templating
+system's setup compared to others - these results may well be
+doing other systems an injustice.
+
+With that disclaimer said, the results do seem reasonable and give
+a broad indication of strengths and weaknesses of some systems, so
+here's the data.
+
+  Output of ~/projects/Template-Sandbox/bin/bench_various_templaters.pl
+  HTC_file - HTML::Template::Compiled - (Loaded from file)
+  HTC_mem - HTML::Template::Compiled - (Compiled in memory)
+  HTC_str - HTML::Template::Compiled - (From string ref - cached if possible)
+  HTE_mem - HTML::Template::Expr - (Compiled in memory)
+  HTE_str - HTML::Template::Expr - (From string ref - cached if possible)
+  HTJ_mem - HTML::Template::JIT - Compiled to C template - (Compiled in memory)
+  HTP_mem - HTML::Template::Pro - (Compiled in memory)
+  HTP_str - HTML::Template::Pro - (From string ref - cached if possible)
+  HT_file - HTML::Template - (Loaded from file)
+  HT_mem - HTML::Template - (Compiled in memory)
+  HT_str - HTML::Template - (From string ref - cached if possible)
+  TA_H_NOCACHE_str - Template::Alloy with string ref caching off using HTML::Template interface - (From string ref - cached if possible)
+  TA_H_file - Template::Alloy using HTML::Template interface - (Loaded from file)
+  TA_H_mem - Template::Alloy using HTML::Template interface - (Compiled in memory)
+  TA_H_str - Template::Alloy using HTML::Template interface - (From string ref - cached if possible)
+  TA_NOCACHE_str - Template::Alloy with string ref caching off using process_simple - (From string ref - cached if possible)
+  TA_PS_mem - Template::Alloy - Perl code eval based using process_simple - (Compiled in memory)
+  TA_P_file - Template::Alloy - Perl code eval based - (Loaded from file)
+  TA_P_mem - Template::Alloy - Perl code eval based - (Compiled in memory)
+  TA_S_file - Template::Alloy::XS using TT interface using process_simple - (Loaded from file)
+  TA_file - Template::Alloy using TT interface - (Loaded from file)
+  TA_mem - Template::Alloy using TT interface - (Compiled in memory)
+  TA_str - Template::Alloy using TT interface - (From string ref - cached if possible)
+  TMPL_file - Text::Tmpl - Engine is C based - (Loaded from file)
+  TMPL_str - Text::Tmpl - Engine is C based - (From string ref - cached if possible)
+  TS_CF_file - Template::Sandbox - with Cache::CacheFactory - (Loaded from file)
+  TS_CF_mem - Template::Sandbox - with Cache::CacheFactory - (Compiled in memory)
+  TS_CHIMM_file - Template::Sandbox - with CHI FastMmap - (Loaded from file)
+  TS_CHI_file - Template::Sandbox - with CHI - (Loaded from file)
+  TS_CHI_mem - Template::Sandbox - with CHI - (Compiled in memory)
+  TS_CMM_file - Template::Sandbox - with Cache::FastMmap - (Loaded from file)
+  TS_str - Template::Sandbox - (From string ref - cached if possible)
+  TTXCET_str - Template::Toolkit with Stash::XS and Template::Parser::CET - (From string ref - cached if possible)
+  TTX_file - Template::Toolkit with Stash::XS - (Loaded from file)
+  TTX_mem - Template::Toolkit with Stash::XS - (Compiled in memory)
+  TTX_str - Template::Toolkit with Stash::XS - (From string ref - cached if possible)
+  TT_file - Template::Toolkit - (Loaded from file)
+  TT_mem - Template::Toolkit - (Compiled in memory)
+  TT_str - Template::Toolkit - (From string ref - cached if possible)
+  TextTemplate_str - Text::Template - Perl code eval based - (From string ref - cached if possible)
+  ---Match Run Through----------------------------------------------------
+    All test output matched!
+  ---STR------------------------------------------------------------------
+  From a string or scalarref tests
+  Benchmark: running HT, HTC, HTE, HTP, TA, TA_H, TA_H_NOCACHE, TA_NOCACHE, TMPL, TS, TT, TTX, TTXCET, TextTemplate for at least 30 CPU seconds...
+          HT: 31 wallclock secs (31.54 usr +  0.00 sys = 31.54 CPU) @ 51.30/s (n=1618)
+         HTC: 33 wallclock secs (32.47 usr +  0.01 sys = 32.48 CPU) @ 11.51/s (n=374)
+         HTE: 32 wallclock secs (31.52 usr +  0.00 sys = 31.52 CPU) @ 13.17/s (n=415)
+         HTP: 31 wallclock secs (31.02 usr +  0.01 sys = 31.03 CPU) @ 2719.30/s (n=84380)
+          TA: 31 wallclock secs (31.50 usr +  0.00 sys = 31.50 CPU) @ 155.24/s (n=4890)
+        TA_H: 32 wallclock secs (31.56 usr +  0.00 sys = 31.56 CPU) @ 198.35/s (n=6260)
+  TA_H_NOCACHE: 32 wallclock secs (31.51 usr +  0.00 sys = 31.51 CPU) @ 79.72/s (n=2512)
+  TA_NOCACHE: 32 wallclock secs (31.58 usr +  0.00 sys = 31.58 CPU) @ 63.14/s (n=1994)
+        TMPL: 32 wallclock secs (31.72 usr +  0.07 sys = 31.79 CPU) @ 1297.92/s (n=41261)
+          TS: 32 wallclock secs (31.62 usr +  0.00 sys = 31.62 CPU) @ 37.00/s (n=1170)
+         2%  -28% -47% -47% -57%  -62%   -63%     -64%   -66% -95%
+  HT       87.7/s   63%   38%   29%    --   -7% -31% -32% -45%  -51%   -52%     -53%   -
+
+As can be seen from the results, L<Template::Sandbox> benefits
+massively from using external caching modules when it comes to
+on-disk caching with only the C<libtmpl>-based L<Text::Tmpl>
+running faster, in fact the gain is so much that the performance
+is more a credit to those caching modules rather than
+L<Template::Sandbox>.
+
+You can see this when looking at the in-memory caching, where
+the performance gap is much smaller among the mostly-perl template
+modules, all of whom trail far behind the more exotic compilation
+methodologies of L<HTML::Template::Compiled>, L<HTML::Template::Pro>
+and L<HTML::Template::JIT>.
+
+When it comes to the string-template benchmarks, you can see the impact
+of being forced to compile the template each time, this is representative
+of a cache-miss if you're using caching, and here L<Template::Sandbox>
+shows a fairly mediocre performance, partly due to its pure-perl
+implementation and partly due to the heavy optimization phase - you can
+see similar costs in all the more heavily-compiled template systems.
+
+For reference the template was generated with the following perl code,
+equivilents being generated for other template markup:
+
+  my $filler = ((" foo" x 10)."\n") x 10;
+  my $middle_repeats     = 30;
+  
+  my $stash_t = {
+    shell_header => "This is a header",
+    shell_footer => "This is a footer",
+    shell_start  => "<html>",
+    shell_end    => "<end>",
+    a_stuff      => [qw(one two three four)],
+  };
+  
+  my $middle_ts = <<"DOC";
+  $filler
+  
+  
+  <: if foo :>
+  This is some text.
+  <: endif :>
+  
+  
+  <: foreach i in a_stuff :><: expr i :><: endfor :>
+  <: expr pass_in_something :>
+  
+  $filler
+  DOC
+  
+  $middle_ts = $middle_ts x $middle_repeats;
+  
+  my $content_ts = <<"DOC";
+  <: expr shell_header :>
+  <: expr shell_start :>
+  $middle_ts
+  <: expr shell_end :>
+  <: expr shell_footer :>
+  DOC
+
+Once the benchmark script has been made a little more user-friendly,
+I aim to bundle it in the distribution samples directory in the same
+manner as L<Template::Alloy>.
 
 =head1 PRIVATE AND SEMI-PRIVATE METHODS
 
@@ -5601,17 +5845,17 @@ template position added.
 
 =head1 QUALITY ASSURANCE AND TEST METRICS
 
-Currently there are 1089 tests within the distribution, with coverage:
+Currently there are 1105 tests within the distribution, with coverage:
 
- ---------------------------- ------ ------ ------ ------ ------ ------ ------
- File                           stmt   bran   cond    sub    pod   time  total
- ---------------------------- ------ ------ ------ ------ ------ ------ ------
- blib/lib/Template/Sandbox.pm   98.5   90.9   85.4  100.0  100.0   99.7   95.0
- ...mplate/Sandbox/Library.pm  100.0  100.0   36.4  100.0  100.0    0.3   93.1
- ...andbox/NumberFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
- ...andbox/StringFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
- Total                          98.6   91.2   83.0  100.0  100.0  100.0   95.0
- ---------------------------- ------ ------ ------ ------ ------ ------ ------
+  ---------------------------- ------ ------ ------ ------ ------ ------ ------
+  File                           stmt   bran   cond    sub    pod   time  total
+  ---------------------------- ------ ------ ------ ------ ------ ------ ------
+  blib/lib/Template/Sandbox.pm   98.7   91.3   86.0  100.0  100.0   99.7   95.3
+  ...mplate/Sandbox/Library.pm  100.0  100.0   36.4  100.0  100.0    0.2   93.1
+  ...andbox/NumberFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
+  ...andbox/StringFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
+  Total                          98.8   91.6   83.7  100.0  100.0  100.0   95.2
+  ---------------------------- ------ ------ ------ ------ ------ ------ ------
 
 You can generate this report within the distribution's directory by:
 
