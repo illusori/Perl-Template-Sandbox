@@ -508,7 +508,7 @@ BEGIN
 {
     use Exporter   ();
 
-    $Template::Sandbox::VERSION     = '1.01_05';
+    $Template::Sandbox::VERSION     = '1.01_06';
     @Template::Sandbox::ISA         = qw( Exporter );
 
     @Template::Sandbox::EXPORT      = qw();
@@ -1866,8 +1866,8 @@ sub _compile_template
         $pos_stack[ 0 ][ 1 ] += $lines;
         if( $lines )
         {
-            $hunk =~ /\n(.*?)$/m;
-            $pos_stack[ 0 ][ 2 ] = length( $1 ) + 1;
+            $pos_stack[ 0 ][ 2 ] = ( $hunk =~ /\n(.+)\z/mo ) ?
+                ( length( $1 ) + 1 ) : 1;
         }
         else
         {
