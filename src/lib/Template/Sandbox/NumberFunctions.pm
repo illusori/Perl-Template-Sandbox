@@ -7,7 +7,7 @@ use base 'Template::Sandbox::Library';
 
 use Template::Sandbox qw/:function_sugar/;
 
-$Template::Sandbox::NumberFunctions::VERSION = '1.01';
+$Template::Sandbox::NumberFunctions::VERSION = '1.01_06';
 
 #  From perlfaq5: add thousands-commas to number.
 #  Yes it doesn't respect locale.
@@ -229,7 +229,7 @@ Last author:     $Author: illusori $
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2005-2009 Sam Graham, all rights reserved.
+Copyright 2005-2010 Sam Graham, all rights reserved.
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
