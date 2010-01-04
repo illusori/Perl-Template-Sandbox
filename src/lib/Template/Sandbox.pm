@@ -1859,15 +1859,14 @@ sub _compile_template
         }
 
         #  Update pos.
-        #  TODO: adjust for any trimmage.
 #        $lines = () = $hunk =~ /\n/g;
-        $lines = $hunk =~ tr/\n//;
 #        $lines = $#{ [ $hunk =~ /\n/g ] } + 1;
-        $pos_stack[ 0 ][ 1 ] += $lines;
+        $lines = $hunk =~ tr/\n//;
         if( $lines )
         {
-            $pos_stack[ 0 ][ 2 ] = ( $hunk =~ /\n(.+)\z/mo ) ?
-                ( length( $1 ) + 1 ) : 1;
+            $pos_stack[ 0 ][ 1 ] += $lines;
+            $pos_stack[ 0 ][ 2 ] =
+                ( $hunk =~ /\n(.+)\z/mo ) ? ( length( $1 ) + 1 ) : 1;
         }
         else
         {
@@ -1891,20 +1890,20 @@ sub _compile_template
         #  "cannot happen".
         $self->error( "trim on non-literal, trim-stack corrupted?" )
             unless $compiled[ $addr ]->[ 0 ] == LITERAL;
-        $compiled[ $addr ]->[ 2 ] =~ s/^\n//;
+        $compiled[ $addr ]->[ 2 ] =~ s/^\n//o;
     }
 
     #  We're done.
-    $self->{ template } = {
-            program => [ @compiled ],
-            files   => [ @files ],
-        };
-    $self->{ template } = $self->_optimize_template( $self->{ template } );
-#    $self->{ template } = $self->_optimize_template(
-#        {
+#    $self->{ template } = {
 #            program => [ @compiled ],
 #            files   => [ @files ],
-#        } );
+#        };
+    $self->{ template } = {
+            program => \@compiled,
+            files   => \@files,
+        };
+    $self->_optimize_template();
+
     delete $self->{ current_pos };
     delete $self->{ pos_stack };
     delete $self->{ files };
@@ -1924,14 +1923,14 @@ sub _compile_template
 #  Warning, pass-by-ref: modifies $template.
 sub _optimize_template
 {
-    my ( $self, $template ) = @_;
+    my ( $self ) = @_;
     my ( $program, @nest_stack, %deletes,  %jump_targets, @loop_blocks );
 #    my ( @function_table, %function_index );
 
     #  Optimization pass:
     #    TODO: unroll constant low-count fors?
 
-    $program = $template->{ program };
+    $program = $self->{ template }->{ program };
 
     #  Void-wrap assign expressions.
     for( my $i = 0; $i <= $#{$program}; $i++ )
@@ -2046,7 +2045,7 @@ sub _optimize_template
 #warn "Literal merges: " . scalar( keys( %deletes ) );
     $self->_delete_instr( $program, keys( %deletes ) ) if %deletes;
 
-    #  TODO: look for loops that make no use of special loop vars.
+    #  Look for loops that make no use of special loop vars.
     @loop_blocks = ();
     for( my $i = 0; $i <= $#{$program}; $i++ )
     {
@@ -2198,8 +2197,6 @@ sub _optimize_template
 #        }
 #    }
 #    $template->{ function_table } = [ @function_table ];
-
-    return( $template );
 }
 
 #  Warning, pass-by-ref: modifies $program.
@@ -5823,7 +5820,10 @@ massively from using external caching modules when it comes to
 on-disk caching with only the C<libtmpl>-based L<Text::Tmpl>
 running faster, in fact the gain is so much that the performance
 is more a credit to those caching modules rather than
-L<Template::Sandbox>.
+L<Template::Sandbox>.  You should also probably ignore the
+FastMmap-based benchmarks since they're not strictly just on-disk
+benchmarks - the figures are included for completeness rather than
+comparision.
 
 You can see this when looking at the in-memory caching, where
 the performance gap is much smaller among the mostly-perl template
@@ -6180,7 +6180,7 @@ Last author:     $Author: illusori $
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2005-2009 Sam Graham, all rights reserved.
+Copyright 2005-2010 Sam Graham, all rights reserved.
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
