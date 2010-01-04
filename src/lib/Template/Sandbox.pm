@@ -508,7 +508,7 @@ BEGIN
 {
     use Exporter   ();
 
-    $Template::Sandbox::VERSION     = '1.01_06';
+    $Template::Sandbox::VERSION     = '1.01_07';
     @Template::Sandbox::ISA         = qw( Exporter );
 
     @Template::Sandbox::EXPORT      = qw();
@@ -6111,8 +6111,8 @@ of the loops, whereas the I<context-folded> case will cause the new
 variable to exist until the end of the outer context the C<for>
 loop was called from.
 
-This is a bug, and the correct behaviour would be too not I<context-fold>
-loop if there's an assign inside, however this is difficult to test until
+This is a bug, and the correct behaviour would be to not I<context-fold>
+the loop if there's an assign inside, however this is difficult to test until
 I<context-folding> of loops is performed during the compile-phase
 optimization rather than at runtime.
 
