@@ -1,5 +1,11 @@
 Revision history for Template::Sandbox
 
+1.01_06 Version released at 2010-01-04-13:40.  *** Development version. ***
+        Version started at  2009-12-31-17:43.
+        Correction to broken position character counting after newlines.
+        _optimize_template() no longer takes args or returns one.
+        Added clarification to FastMmap caching benchmarks in POD.
+
 1.01_05 Version released at 2009-12-30-10:31.  *** Development version. ***
         Version started at  2009-12-30-09:55.
         Typo fixed in the new documentation.
