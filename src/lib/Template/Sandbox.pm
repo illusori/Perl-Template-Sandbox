@@ -1308,10 +1308,10 @@ sub _escape_string
 
 sub _define_value
 {
-    my ( $self, $defines, $define, $default, $quote ) = @_;
+    my ( $self, $defines, $define, $default, $quote, $pos ) = @_;
     my ( $value );
 
-#$self->warning( "replacing define '$define'" );
+#$self->warning( "replacing define '$define', default '$default', quote is $quote, pos '$pos'" );
     if( $self->{ seen_defines }->{ $define }++ )
     {
         $value = "[recursive define '$define']";
@@ -1334,6 +1334,29 @@ sub _define_value
 
     $value = "'" . $self->_escape_string( $value ) . "'" if $quote;
 
+    if( defined( $pos ) )
+    {
+        my ( $lines, $definelen, $valuelen );
+
+        $lines     = $value =~ tr/\n//;
+        $definelen = 3 + ( $quote ? 2 : 0 ) + length( $define ) +
+            ( defined( $default ) ? length( $default ) : 0 );
+        $valuelen  = length( $value );
+
+        if( $lines )
+        {
+            push @{$self->{ offsets }}, [ $pos, $valuelen, -$lines,
+                $definelen - $valuelen,
+                ]
+        }
+        else
+        {
+            push @{$self->{ offsets }}, [ $pos, $valuelen, 0,
+                $definelen - $valuelen,
+                ]
+        }
+    }
+
     return( $value );
 }
 
@@ -1346,11 +1369,37 @@ sub _replace_defines
     unless( $self->{ seen_defines } )
     {
         $self->{ seen_defines } = {};
+        $self->{ offsets } = [];
         $top = 1;
     }
     1 while $template_content =~ s/\$\{('?)([A-Z0-9_]+)(?::([^\}]*))?\1\}/
-        $self->_define_value( $defines, $2, $3, $1 )/gex;
-    delete $self->{ seen_defines } if $top;
+        $self->_define_value( $defines, $2, $3, $1,
+            $top ? pos( $template_content ) : undef )/gex;
+    if( $top )
+    {
+        delete $self->{ seen_defines };
+        delete $self->{ offsets } if $#{$self->{ offsets }} == -1;
+        if( $self->{ offsets } )
+        {
+            #  pos() gives us position in original string, we need to
+            #  renumber to be position in replaced string.
+            my $carry = 0;
+            foreach my $offset ( @{$self->{ offsets }} )
+            {
+                $offset->[ 0 ] -= $carry;
+                $carry += $offset->[ 3 ];
+            }
+#my $t = $template_content;
+#foreach my $offset ( reverse( @{$self->{ offsets }} ) )
+#{
+#    substr( $t, $offset->[ 0 ] + $offset->[ 1 ], 0 ) = "XXX";
+#    substr( $t, $offset->[ 0 ], 0 ) = "XXX";
+#}
+#print "Replaced template:\n$t\n";
+#use Data::Dumper;
+#print "Using offsets: " . Data::Dumper::Dumper( $self->{ offsets } ) . "\n";
+        }
+    }
 
     return( $template_content );
 }
@@ -1488,7 +1537,10 @@ sub _compile_template
     $self->{ files } = \@files;
     
     #  Stack of what position in which file we're currently at.
-    @pos_stack    = ( [ $file_numbers{ $self->{ filename } }, 1, 1 ] );
+    @pos_stack    = ( [
+        $file_numbers{ $self->{ filename } }, 1, 1, 0, $self->{ offsets },
+        ] );
+    delete $self->{ offsets };
     #  Stack of what defines are available.
     @define_stack = ( $self->{ defines } );
     #  Stack of unclosed block-level statements.
@@ -1535,7 +1587,8 @@ sub _compile_template
 #my ( $dumpme );
     for( $i = 0; $i <= $#hunks; $i++ )
     {
-        my ( $hunk, $pos, $lines, $queue_pos, $last, $next );
+        my ( $hunk, $pos, $lines, $queue_pos, $last, $hunklen, $hunkstart,
+             $offset_index );
 
         $hunk = $hunks[ $i ];
 
@@ -1561,7 +1614,6 @@ sub _compile_template
             {
                 $hunk =~ s/:>(?:.*)$/:>/s;
                 splice( @hunks, $i, 1, $hunk, $rest );
-                $next = $i + 1;
             }
 
             $token =~ s/\s+/ /g;
@@ -1813,7 +1865,9 @@ sub _compile_template
                         push @files, $filename;
                         $file_numbers{ $filename } = $#files;
                     }
-                    $queue_pos = [ $file_numbers{ $filename }, 1, 1 ];
+                    $queue_pos = [ $file_numbers{ $filename }, 1, 1, 0,
+                        $self->{ offsets } ];
+                    delete $self->{ offsets };
                 }
             }
             elsif( $token eq 'endinclude' )
@@ -1858,19 +1912,97 @@ sub _compile_template
             $trim_next = 0;
         }
 
+# +--------------------+------------------------+-----------------------------+
+# |  define >          |           nl           |         !nl                 |
+# +--- hunk v ---------+------------------------+-----------------------------+
+# |        !nl         |   not possible (1)     | offsets: char               |
+# |  nl after defines  |  offsets: nl, !char    | offsets: nl, !char (no-op)  |
+# | nl before defines  | offset: nl             | offsets: char               |
+# |                    | char:                  |                             |
+# |                    |  chars between nl &    |                             |
+# |                    |  start of define (2) + |                             |
+# |                    |  original define len + |                             |
+# |                    |  chars after define    |                             |
+# | nl between defines |      treat in reverse series as after/before         |
+# +--------------------+------------------------+-----------------------------+
+#
+#  TODO: (1) define spans hunks? (add test case!)
+#  TODO: define spans defines?   (add test case!)
+#  (2) characters is "fudged count", there may be other defines there. :(
+#
+# Detection:
+#   nl in define: nl offset != 0
+#   nl in hunk: nl in final hunk != total nl in offsets
+#
+
+
         #  Update pos.
+        $hunklen    = length( $hunk );
+        $pos        = $pos_stack[ 0 ];
+        $hunkstart  = $pos->[ 3 ];
+        $pos->[ 3 ] += $hunklen;
+
+#use Data::Dumper;
+#print "After hunk: xxx${hunk}xxx\nPos is: " . Data::Dumper::Dumper( $pos ) . "\n";
+
+        #  Do we have offsets, and have we just passed one?
+        $offset_index = -1;
+        while( $pos->[ 4 ] and $offset_index < $#{$pos->[ 4 ]} and
+               $pos->[ 4 ]->[ $offset_index + 1 ]->[ 0 ] <= $pos->[ 3 ] )
+        {
+            my ( $offset );
+
+            $offset_index++;
+            $offset = $pos->[ 4 ]->[ $offset_index ];
+            #  Replace any newlines in the section that was the contents
+            #  of a define, this is so that they don't count towards line
+            #  counts or finding the "most recent newline" for character
+            #  position counts.
+            #  This is inelegant but much simpler (and possibly faster)
+            #  than trying to compensate and find the "right" newline
+            #  to count from, especially since defines containing newlines
+            #  are hopefully a corner-case.
+#print "Offset index: $offset_index\nOffset: " . Data::Dumper::Dumper( $offset ) . "\n";
+#print "substr( hunk, " . ( $offset->[ 0 ] - $hunkstart ) . ", " . ( $offset->[ 1 ] ) . " )\n" if $offset->[ 2 ];
+
+            substr( $hunk, $offset->[ 0 ] - $hunkstart, $offset->[ 1 ] ) =~
+                s/\n/ /go
+                if $offset->[ 2 ];
+        }
+
 #        $lines = () = $hunk =~ /\n/g;
 #        $lines = $#{ [ $hunk =~ /\n/g ] } + 1;
-        $lines = $hunk =~ tr/\n//;
+        $lines   = $hunk =~ tr/\n//;
         if( $lines )
         {
-            $pos_stack[ 0 ][ 1 ] += $lines;
-            $pos_stack[ 0 ][ 2 ] =
+            $pos->[ 1 ] += $lines;
+            $pos->[ 2 ] =
                 ( $hunk =~ /\n(.+)\z/mo ) ? ( length( $1 ) + 1 ) : 1;
         }
         else
         {
-            $pos_stack[ 0 ][ 2 ] += length( $hunk );
+            $pos->[ 2 ] += $hunklen;
+        }
+
+        if( $offset_index != -1 )
+        {
+            my ( @offsets, $nlpos );
+
+            @offsets = splice( @{$pos->[ 4 ]}, 0, $offset_index + 1 );
+            $pos->[ 4 ] = undef if $#{$pos->[ 4 ]} == -1;
+
+            $nlpos = $lines ? ( $pos->[ 3 ] - $pos->[ 2 ] ) : 0;
+
+            foreach my $offset ( @offsets )
+            {
+                #  Don't apply the offset if it was before the final
+                #  non-define newline
+                next if $offset->[ 0 ] < $nlpos;
+#use Data::Dumper;
+#print "Applying offset: " . Data::Dumper::Dumper( $offset ) . "\n";
+#                $pos->[ 1 ] += $offset->[ 2 ];
+                $pos->[ 2 ] += $offset->[ 3 ];
+            }
         }
 
         unshift @pos_stack, $queue_pos if $queue_pos;
@@ -6000,11 +6132,39 @@ and don't report from the perspective of your calling code.
 
 =item line numbers and char counts partially broken.
 
-Currently line numbers and character counts into the original file
-are occassionally incorrect in a number of situations including
-(but not limited to) define replacement and a couple of other as-yet
-unknown factors pending investigation.  This will be fixed in a later
-version.
+Line numbers and character counts into the original file
+are still occassionally incorrect in a couple of (mostly pathological)
+situations where template defines either contain fragments of a template
+statement that spans the boundary of the statement, or that contain
+partial defines themselves.
+
+For example, both of these will confuse the character position count:
+
+  #  ${EGADS} overlaps one, but not both, end of the <: expr :> statement.
+  $template->set_template_string(
+      "This is${EGADS}ological' :>.",
+      {
+          EGADS => " <: expr 'path",
+      } );
+
+  #  ${ERKLE} overlaps one, but not both, end of ${HURKLE}.
+  $template->set_template_string(
+      "And so${ERKLE}KLE}this.",
+      {
+          ERKLE  => '${HUR',
+          HURKLE => " <: expr 'is' :> ",
+      } );
+
+Although in both these examples the C<expr> will be constant-folded away
+and the misnumbered positions will be undetectable.
+Examples that don't optimize away are more complicated and unfortunately
+obscure the root problem behaviour.
+
+Quite what line numbers result from these constructs is undefined and
+unsupported, and possibly will be subject to change without notice.
+
+This bug is not likely to be corrected soon unless it impacts people
+trying to do something sane. :)
 
 =item Quoted-':>' inside expressions still terminate the statement
 
