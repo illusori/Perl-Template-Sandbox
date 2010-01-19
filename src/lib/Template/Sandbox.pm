@@ -357,12 +357,20 @@ my $capture_variable_regexp = qr/
     ^
     #  variablesegment.variablesegment.variablesegment etc.
     ($variable_segment_regexp)
-    ((?:
-        \.
-        $variable_segment_regexp
-    )*)
+    #  we don't care at this point what the rest of the crud is.
+    (.*)
     $
     /sxo;
+#my $capture_variable_regexp = qr/
+#    ^
+#    #  variablesegment.variablesegment.variablesegment etc.
+#    ($variable_segment_regexp)
+#    ((?:
+#        \.
+#        $variable_segment_regexp
+#    )*)
+#    $
+#    /sxo;
 
 my $function_regexp = qr/
     #  abc( expr )
@@ -2068,7 +2076,9 @@ sub _compile_template
 sub _optimize_template
 {
     my ( $self ) = @_;
-    my ( $program, @nest_stack, %deletes,  %jump_targets, @loop_blocks );
+    my ( $program, @nest_stack, %deletes, %jump_targets, @loop_blocks,
+         $value );
+
 #    my ( @function_table, %function_index );
 
     #  Optimization pass:
@@ -2094,20 +2104,18 @@ sub _optimize_template
     %deletes    = ();
     for( my $i = 0; $i <= $#{$program}; $i++ )
     {
-        my ( $line, $value );
+        next unless $program->[ $i ]->[ 0 ] == JUMP_IF and
+                    $program->[ $i ]->[ 3 ]->[ 0 ] == LITERAL;
 
-        $line = $program->[ $i ];
-        next unless $line->[ 0 ] == JUMP_IF and
-                    $line->[ 3 ]->[ 0 ] == LITERAL;
-
-        $value = $self->_eval_expression( $line->[ 3 ], 1 );
-        $value = not $value if $line->[ 4 ];
+        $value = $self->_eval_expression( $program->[ $i ]->[ 3 ], 1 );
+        $value = not $value if $program->[ $i ]->[ 4 ];
 
         if( $value )
         {
             #  Always true, fold it into a JUMP.
 #warn "Folding constant JUMP_IF into JUMP.";
-            $program->[ $i ] = [ JUMP, $line->[ 1 ], $line->[ 2 ] ];
+            $program->[ $i ] = [ JUMP, $program->[ $i ]->[ 1 ],
+                $program->[ $i ]->[ 2 ] ];
         }
         else
         {
@@ -2189,12 +2197,12 @@ sub _optimize_template
     #  TODO: this should be moved into the above loop to keep it single-pass.
     foreach my $block ( @loop_blocks )
     {
-        my ( $special_vars_needed );
+        my ( $special_vars_needed, $line );
 
         $special_vars_needed = 0;
         FORBLOCK: for( my $i = $block->[ 0 ] + 1; $i < $block->[ 1 ]; $i++ )
         {
-            my ( $line, @exprs );
+            my ( @exprs );
 
             $line = $program->[ $i ];
             if( $line->[ 0 ] == EXPR )
@@ -2335,7 +2343,7 @@ sub _optimize_template
 sub _delete_instr
 {
     my ( $self, $program, @addrs ) = @_;
-    my ( %renumbers, $instr, $num );
+    my ( %renumbers, $instr, $num, $lastnum, $lastoffset, $offset, $numaddr );
 
 #warn "** Deleting instr: " . join( ', ', @addrs ) . ".";
 #warn "-- Pre:\n" . $self->dumpable_template();
@@ -2356,6 +2364,8 @@ sub _delete_instr
 
     #  Now we need to renumber any jump and loop targets affected.
     %renumbers = ();
+    $lastnum = $lastoffset = 0;
+    $numaddr = $#addrs;
     foreach my $line ( @{$program} )
     {
         next unless ( $instr = $line->[ 0 ] ) == JUMP or
@@ -2369,16 +2379,34 @@ sub _delete_instr
             next;
         }
 
-        my $offset = 0;
-        foreach my $addr ( @addrs )
+        #  This contraption takes advantages of the fact that jumps
+        #  tend to have fairly local targets to other local jumps'
+        #  targets, rather than searching from the start of the
+        #  template each time.
+        if( $lastnum <= $num )
         {
-            last if $addr >= $num;
-            $offset++;
+#use Data::Dumper;
+#print "Jump target: $num.\nDeleted: ", Data::Dumper::Dumper( \@addrs ), "\n";
+            #  This jump is forwards from our last, search forwards.
+            for( $offset = $lastoffset; $offset <= $numaddr; $offset++ )
+            {
+#print "  Offset is $offset, addrs[ $offset ] is $addrs[ $offset ]\n";
+                last if $addrs[ $offset ] >= $num;
+            }
         }
+        else
+        {
+            #  This jump is before our last, search backwards.
+            for( $offset = $lastoffset; $offset > 0; $offset-- )
+            {
+                last if $addrs[ $offset - 1 ] < $num;
+            }
+        }
+        $lastnum    = $num;
+        $lastoffset = $offset;
 
         #  Cache the result, if-elsif-else will have lots of the same targets.
-        $renumbers{ $num } = $num - $offset;
-        $line->[ 2 ] = $num - $offset;
+        $renumbers{ $num } = ( $line->[ 2 ] -= $offset );
     }
 
 #warn "-- Renumbered:\n" . $self->dumpable_template();
