@@ -90,10 +90,11 @@ my %special_values_names = (
     );
 
 sub LOOP_STACK_COUNTER()  { 0; }
-sub LOOP_STACK_SET()      { 1; }
-sub LOOP_STACK_HASH()     { 2; }
-sub LOOP_STACK_CONTEXT()  { 3; }
-sub LOOP_STACK_SPECIALS() { 4; }
+sub LOOP_STACK_LAST()     { 1; }
+sub LOOP_STACK_SET()      { 2; }
+sub LOOP_STACK_HASH()     { 3; }
+sub LOOP_STACK_CONTEXT()  { 4; }
+sub LOOP_STACK_SPECIALS() { 5; }
 
 #  The lower the weight the tighter it binds.
 my %operators = (
@@ -232,9 +233,7 @@ my %syntaxes = (
         zero_width => 1,
         },
     'for'     => {
-        positional_args => [ 'iterator', 'set' ],
-        valid_args      => [ 'iterator', 'set' ],
-        zero_width      => 1,
+        zero_width => 1,
         },
     'endfor'      => {
         zero_width => 1,
@@ -486,10 +485,20 @@ my $capture_expr_op_remain_regexp = qr/
     \s+
     ($operator_regexp)
     \s+
-    (.*?)
-    \s*
+    (.*)
     $
     /sxo;
+#my $capture_expr_op_remain_regexp = qr/
+#    ^
+#    \s*
+#    ($atomic_expr_regexp)
+#    \s+
+#    ($operator_regexp)
+#    \s+
+#    (.*?)
+#    \s*
+#    $
+#    /sxo;
 
 #my $capture_expr_if_else_remain_regexp = qr/
 #    ^
@@ -507,15 +516,12 @@ my $capture_expr_op_remain_regexp = qr/
 
 my $capture_expr_comma_remain_regexp = qr/
     ^
-    \s*
     ($expr_regexp)
-    \s*
     (?:
         (?: , | => )
         \s*
-        (.*?)
+        (.*)
     )?
-    \s*
     $
     /sxo;
 
@@ -1693,14 +1699,32 @@ sub _compile_template
             }
             elsif( $token eq 'if' or $token eq 'unless' )
             {
+                my ( $expr );
+
+                $expr = $self->_compile_expression( $args );
+                if( $token ne 'if' )
+                {
+                    if( $expr->[ 0 ] == LITERAL )
+                    {
+                        $expr->[ 2 ] = not $expr->[ 2 ];
+                    }
+                    else
+                    {
+                        $expr = [ UNARY_OP, 'unless', 'not', $expr ];
+                    }
+                }
                 push @compiled,
-                    [ JUMP_IF, $pos, undef,
-                       $self->_compile_expression( $args ),
-                       $token eq 'if' ? 1 : 0 ];
+                    [ JUMP_IF, $pos, undef, $expr ];
+#                push @compiled,
+#                    [ JUMP_IF, $pos, undef,
+#                       $self->_compile_expression( $args ),
+#                       $token eq 'if' ? 1 : 0 ];
                 unshift @nest_stack, [ 'if', $#compiled ];
             }
             elsif( $token eq 'elsif' or $token eq 'elsunless' )
             {
+                my ( $expr );
+
                 if( $#nest_stack == -1 or
                     ( $nest_stack[ 0 ][ 0 ] ne 'if' and
                       $nest_stack[ 0 ][ 0 ] ne 'elsif' ) )
@@ -1710,10 +1734,24 @@ sub _compile_template
                 #  Closing jump of previous block.
                 push @compiled,
                     [ JUMP, $pos, undef ];
-                push @compiled,
-                    [ JUMP_IF, $pos, undef,
-                       $self->_compile_expression( $args ),
-                       $token eq 'elsif' ? 1 : 0 ];
+
+                $expr = $self->_compile_expression( $args );
+                if( $token ne 'elsif' )
+                {
+                    if( $expr->[ 0 ] == LITERAL )
+                    {
+                        $expr->[ 2 ] = not $expr->[ 2 ];
+                    }
+                    else
+                    {
+                        $expr = [ UNARY_OP, 'elsunless', 'not', $expr ];
+                    }
+                }
+                push @compiled, [ JUMP_IF, $pos, undef, $expr ];
+#                push @compiled,
+#                    [ JUMP_IF, $pos, undef,
+#                       $self->_compile_expression( $args ),
+#                       $token eq 'elsif' ? 1 : 0 ];
                 #  Now, update jump address of previous if/elsif
                 $compiled[ $nest_stack[ 0 ][ 1 ] ][ 2 ] =
                     $#compiled;
@@ -1780,22 +1818,13 @@ sub _compile_template
             {
                 my ( $iterator, $set );
 
-                #  TODO: _parse_args() _really_ needed for for any more?
-#                $args = $self->_parse_args( $args, $token );
-
-                #  Extract the var name.
-#                $iterator = $args->{ iterator };
-#                delete $args->{ iterator };
-#                $set      = $args->{ set };
-#                delete $args->{ set };
-#                $args = 0 unless scalar( keys( %{$args} ) );
-
+                #  TODO: syntax checking/error check needed here.
                 ( $iterator, $set ) = $args =~ /^(.*) in (.*)$/o;
 
                 push @compiled,
                     [ FOR, $pos, undef, $iterator,
                       $self->_compile_expression( $set ),
-                      0, 1 ];
+                      1 ];
                 unshift @nest_stack, [ FOR, $#compiled ];
             }
             elsif( $token eq 'endfor' )
@@ -1811,12 +1840,12 @@ sub _compile_template
 
                 $last = shift @nest_stack;
 
-                #  Grab our iterator, set and args from the opening for
+                #  Grab our iterator and set from the opening for
+                #  TODO: needed anymore?  run grabs it from for-stack.
                 push @compiled,
                     [ END_FOR, $pos, $last->[ 1 ] + 1,
                       $compiled[ $last->[ 1 ] ][ 3 ],
-                      $compiled[ $last->[ 1 ] ][ 4 ],
-                      $compiled[ $last->[ 1 ] ][ 5 ] ];
+                      $compiled[ $last->[ 1 ] ][ 4 ] ];
                 #  Update jump address of opening for.
                 $compiled[ $last->[ 1 ] ][ 2 ] = $#compiled + 1;
             }
@@ -2108,20 +2137,20 @@ sub _optimize_template
                     $program->[ $i ]->[ 3 ]->[ 0 ] == LITERAL;
 
         $value = $self->_eval_expression( $program->[ $i ]->[ 3 ], 1 );
-        $value = not $value if $program->[ $i ]->[ 4 ];
+#        $value = not $value if $program->[ $i ]->[ 4 ];
 
         if( $value )
         {
-            #  Always true, fold it into a JUMP.
-#warn "Folding constant JUMP_IF into JUMP.";
-            $program->[ $i ] = [ JUMP, $program->[ $i ]->[ 1 ],
-                $program->[ $i ]->[ 2 ] ];
+            #  Always true, remove the JUMP.
+#warn "Folding constant JUMP_IF into no-op.";
+            $deletes{ $i } = 1;
         }
         else
         {
-            #  Always false, remove the JUMP.
-#warn "Folding constant JUMP_IF into no-op.";
-            $deletes{ $i } = 1;
+            #  Always false, fold it into a JUMP.
+#warn "Folding constant JUMP_IF into JUMP.";
+            $program->[ $i ] = [ JUMP, $program->[ $i ]->[ 1 ],
+                $program->[ $i ]->[ 2 ] ];
         }
     }
     $self->_delete_instr( $program, keys( %deletes ) ) if %deletes;
@@ -2235,7 +2264,7 @@ sub _optimize_template
 
                     $segments = $expr->[ 2 ];
                     #  Needs to have two or more segments.
-                    next unless $#{$segments} > 0;
+                    next unless $expr->[ 4 ] > 0;
                     #  Top stem isn't our loop var, we're not interested.
                     next unless $segments->[ 0 ] eq $block->[ 2 ];
 
@@ -2268,7 +2297,7 @@ sub _optimize_template
                 }
             }
         }
-        $program->[ $block->[ 0 ] ]->[ 6 ] = 0 unless $special_vars_needed;
+        $program->[ $block->[ 0 ] ]->[ 5 ] = 0 unless $special_vars_needed;
     }
 
 
@@ -2694,17 +2723,18 @@ sub _compile_var
         pop @segments;
         pop @originals;
         return( [ FUNC, $original, 'size',
-            [ [ VAR, $original, \@segments, \@originals ] ],
+            [ [ VAR, $original, \@segments, \@originals, $#segments ] ],
             ] );
     }
 
-    return( [ VAR, $original, \@segments, \@originals ] );
+    return( [ VAR, $original, \@segments, \@originals, $#segments ] );
 }
 
 sub _compile_func_args
 {
     my ( $self, $arglist ) = @_;
-    my ( $original, @args );
+    my ( $original, @args, $nextarg );
+
 
     $arglist =~ s/^\s+//;
     $arglist =~ s/\s+$//;
@@ -2713,12 +2743,11 @@ sub _compile_func_args
 
     @args = ();
     while( defined( $arglist ) and length( $arglist ) and
-        ( $arglist =~ $capture_expr_comma_remain_regexp ) )
+        ( $nextarg, $arglist ) =
+            ( $arglist =~ $capture_expr_comma_remain_regexp ) )
     {
-        my ( $nextarg );
-
-        $nextarg = $1;
-        $arglist = $2;
+#        $nextarg = $1;
+#        $arglist = $2;
         push @args, $self->_compile_expression( $nextarg );
     }
     $self->error(
@@ -2894,9 +2923,9 @@ sub _eval_var
     #  This is pulled above the sub's argument extraction for speed, I
     #  will rot in hell for this, but it _is_ performance-critical.
     return( $_[ 0 ]->{ var_stack_top }->{ $_[ 3 ]->[ 0 ] } )
-        unless my $last = $#{$_[ 3 ]};
+        unless $_[ 5 ];
 
-    my ( $self, $instr, $original, $segments, $originals, $undef_ok ) = @_;
+    my ( $self, $instr, $original, $segments, $originals, $last, $undef_ok ) = @_;
     my ( $val, $stem, $i, $special_values, $leaf, $type );
 
     #  Determine the stem (top-level) value
@@ -3135,8 +3164,8 @@ sub run
         {
 #$ret .= "[jump if/unless $line->[3]]";
             $value = $self->_eval_expression( $line->[ 3 ], 1 );
-            $value = not $value if $line->[ 4 ];
-            $lineno = $line->[ 2 ] if $value;
+#            $value = not $value if $line->[ 4 ];
+            $lineno = $line->[ 2 ] unless $value;
         }
         elsif( $instr == FOR )
         {
@@ -3144,7 +3173,7 @@ sub run
 
             $iterator        = $line->[ 3 ];
             $set             = $line->[ 4 ];
-            $specials_needed = $line->[ 6 ];
+            $specials_needed = $line->[ 5 ];
 
             $set_value = $self->_eval_expression( $set, 1 );
             $set_value = [] unless defined $set_value;
@@ -3198,27 +3227,28 @@ sub run
                     $var_stack[ 0 ]->{ $iterator } = $value;
                 }
                 unshift @for_stack, [
-                    0, $set_value, $hash, $context ? 1 : 0, $specials_needed,
+                    0, $last, $set_value, $hash, $context ? 1 : 0,
+                    $specials_needed,
                     ];
             }
         }
         elsif( $instr == END_FOR )
         {
-            my ( $iterator, $set, $set_value, $counter, $hash, $last,
+            my ( $iterator, $set_value, $counter, $hash, $last,
                  $specials_needed );
 
             $iterator = $line->[ 3 ];
-            $set      = $line->[ 4 ];
 
-            $counter         = $for_stack[ 0 ]->[ LOOP_STACK_COUNTER ] + 1;
-            $set_value       = $for_stack[ 0 ]->[ LOOP_STACK_SET ];
-            $hash            = $for_stack[ 0 ]->[ LOOP_STACK_HASH ];
-            $specials_needed = $for_stack[ 0 ]->[ LOOP_STACK_SPECIALS ];
-            $last            = $#{$set_value};
+            $counter = ++$for_stack[ 0 ]->[ LOOP_STACK_COUNTER ];
+            $last    = $for_stack[ 0 ]->[ LOOP_STACK_LAST ];
 
             if( $counter <= $last )
             {
-                $value = $set_value->[ $counter ];
+                $set_value       = $for_stack[ 0 ]->[ LOOP_STACK_SET ];
+                $hash            = $for_stack[ 0 ]->[ LOOP_STACK_HASH ];
+                $specials_needed = $for_stack[ 0 ]->[ LOOP_STACK_SPECIALS ];
+
+                $var_stack[ 0 ]->{ $iterator } = $set_value->[ $counter ];
                 $special_values->{ $iterator } =
                     [
                         $counter,
@@ -3231,13 +3261,9 @@ sub run
                         $counter == $last ?
                             undef :
                             $set_value->[ $counter + 1 ],
-                        $hash ? $hash->{ $value } : undef,
+                        $hash ? $hash->{ $set_value->[ $counter ] } : undef,
                     ]
                     if $specials_needed;
-
-                $var_stack[ 0 ]->{ $iterator } = $value;
-
-                $for_stack[ 0 ]->[ 0 ] = $counter;
 
                 $lineno = $line->[ 2 ];
             }
@@ -3371,15 +3397,14 @@ sub dumpable_template
         }
         elsif( $instr == JUMP_IF )
         {
-            $ret .= $line->[ 2 ] .
-                ( $line->[ 4 ] ? ' unless ' : ' if ' ) .
+            $ret .= $line->[ 2 ] . ' unless ' .
                 _tinydump( $line->[ 3 ] ) . "\n";
         }
         elsif( $instr == FOR )
         {
             $ret .= "$line->[ 3 ] in " . _tinydump( $line->[ 4 ] ) .
                 " then $line->[ 2 ]";
-            $ret .= " (no special-vars)" unless $line->[ 6 ];
+            $ret .= " (no special-vars)" unless $line->[ 5 ];
             $ret .= "\n";
         }
         elsif( $instr == END_FOR )
@@ -5681,6 +5706,8 @@ For loop stack array indices:
 
 =item LOOP_STACK_COUNTER
 
+=item LOOP_STACK_LAST
+
 =item LOOP_STACK_SET
 
 =item LOOP_STACK_HASH
@@ -6319,6 +6346,14 @@ There's probably no reason why void-context flagging couldn't happen as
 part of the expression compilation stage, which would be in time to also
 flag it as zero-width, so this should be expected to happen in a future
 release.
+
+=item JMP_IF confusingly named
+
+The C<JMP_IF> instruction is confusingly misnamed, since it's really
+a C<JMP_UNLESS> instruction. That is it means "jump if the expression
+is false" as opposed to the intuitive "jump if the expression is true".
+Unless you're messing with the compiled template for some reason, this
+is unlikely to effect you.
 
 =back
 
