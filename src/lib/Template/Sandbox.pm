@@ -3091,9 +3091,14 @@ sub _eval_method
 
 sub run
 {
-    my ( $self ) = @_;
+    my $self = $_[ 0 ];
+    #  $line, $instr, $value lexically belong inside the loop,
+    #  but in such a tight loop it's a performance hit, they're
+    #  initialized at the start of each use anyway.
+    #  If oddness ensues, move this line into the head of the loop and
+    #  see if oddness abates.
     my ( $lineno, $ret, @var_stack, @for_stack, $run_start,
-        $program, $last_instr, $special_values );
+        $program, $last_instr, $special_values, $line, $instr, $value );
 
     #  For large templates this tricks perl's memory handling into
     #  giving us a big chunk of contiguous memory so that $ret .= $whatever
@@ -3129,12 +3134,6 @@ sub run
 #        map { $functions{ $_ } } @{$self->{ template }->{ function_table }};
     $special_values = $self->{ special_values };
 
-    #  These lexically belong inside the loop, but in such a tight loop
-    #  it's a performance hit, they're initialized at the start of each
-    #  use anyway.
-    #  If oddness ensues, move this line into the head of the loop and
-    #  see if oddness abates.
-    my ( $line, $instr, $value );
     while( $lineno <= $last_instr )
     {
         $line  = $program->[ $lineno++ ];
@@ -3336,7 +3335,6 @@ sub run
     delete $self->{ current_pos };
     delete $self->{ var_stack };
     delete $self->{ var_stack_top };
-    delete $self->{ input };
     delete $self->{ phase };
 
     return( \$ret );
