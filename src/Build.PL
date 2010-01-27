@@ -21,7 +21,6 @@ my $build = Module::Build->new(
         'Class::Handle'    => 0,
         'Clone'            => 0,
         'Data::Dumper'     => 0,
-        'Digest'           => 0,
         'Digest::MD5'      => 0,
         'IO::File'         => 0,
         'Log::Any'         => 0.03,
