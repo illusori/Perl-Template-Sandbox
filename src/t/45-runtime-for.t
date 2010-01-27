@@ -7,7 +7,7 @@ use Test::More;
 
 use Template::Sandbox;
 
-plan tests => 37;
+plan tests => 36;
 
 my ( $template, $syntax );
 
@@ -164,15 +164,7 @@ $template->set_template_string( $syntax );
 is( ${$template->run()}, 'one => ONE, three => THREE, two => TWO, ', 'for hash show keys => values' );
 
 #
-#  24: <: for iterator=x set=y :> syntax
-$syntax = "<: for iterator=x set=y :><: expr x :> => <: expr x.__value__ :>, <: endfor :>";
-$template = Template::Sandbox->new();
-$template->add_var( y => { one => 'ONE', two => 'TWO', three => 'THREE' } );
-$template->set_template_string( $syntax );
-is( ${$template->run()}, 'one => ONE, three => THREE, two => TWO, ', 'for iterator=x set=y syntax' );
-
-#
-#  25: nested loops across independent hashes (alpha sorted by keys)
+#  24: nested loops across independent hashes (alpha sorted by keys)
 $syntax = "<: for x in y :><: expr x :> => <: expr x.__value__ :>(<: for a in b :><: expr a :> => <: expr a.__value__ :>,<: endfor :>) <: endfor :>";
 $template = Template::Sandbox->new();
 $template->add_var( y => { one => 'ONE', two => 'TWO', three => 'THREE' } );
@@ -181,7 +173,7 @@ $template->set_template_string( $syntax );
 is( ${$template->run()}, 'one => ONE(aaa => AAA,bbb => BBB,ccc => CCC,) three => THREE(aaa => AAA,bbb => BBB,ccc => CCC,) two => TWO(aaa => AAA,bbb => BBB,ccc => CCC,) ', 'nested-for independent-hashes' );
 
 #
-#  26: nested loops across nested hashes (alpha sorted by keys)
+#  25: nested loops across nested hashes (alpha sorted by keys)
 $syntax = "<: for x in y :><: expr x :> => (<: for z in x.__value__ :><: expr z :> => <: expr z.__value__ :>,<: endfor :>) <: endfor :>";
 $template = Template::Sandbox->new();
 $template->add_var( y =>
@@ -194,7 +186,7 @@ $template->set_template_string( $syntax );
 is( ${$template->run()}, 'one => (oneone => ONEONE,onetwo => ONETWO,) three => (threeone => THREEXXX,threetwo => THREEYYY,) two => (twoone => TWOAAA,) ', 'nested-for nested-hashes' );
 
 #
-#  27: for across undef value.
+#  26: for across undef value.
 $syntax = "start <: for x in y :>shouldn't happen <: endfor :>end";
 $template = Template::Sandbox->new();
 $template->set_template_string( $syntax );
@@ -202,7 +194,7 @@ is( ${$template->run()}, 'start end',
     'for across undef value' );
 
 #
-#  28: for across empty array.
+#  27: for across empty array.
 $syntax = "start <: for x in y :>shouldn't happen <: endfor :>end";
 $template = Template::Sandbox->new();
 $template->set_template_string( $syntax );
@@ -211,7 +203,7 @@ is( ${$template->run()}, 'start end',
     'for across empty array' );
 
 #
-#  29: for across empty hash.
+#  28: for across empty hash.
 $syntax = "start <: for x in y :>shouldn't happen <: endfor :>end";
 $template = Template::Sandbox->new();
 $template->set_template_string( $syntax );
@@ -220,7 +212,7 @@ is( ${$template->run()}, 'start end',
     'for across empty hash' );
 
 #
-#  30: loop variable masks template var.
+#  29: loop variable masks template var.
 $syntax = "<: expr a :> <: for a in y :><: expr a :> <: endfor :><: expr a :>";
 $template = Template::Sandbox->new();
 $template->set_template_string( $syntax );
@@ -232,7 +224,7 @@ is( ${$template->run()}, '22 1 2 22',
     'same-name loop-var masks template-var' );
 
 #
-#  31: reuse loop variable checking inner masks outer.
+#  30: reuse loop variable checking inner masks outer.
 $syntax = "<: for x in y :><: for x in z :><: expr x :> <: endfor :><: endfor :>";
 $template = Template::Sandbox->new();
 $template->set_template_string( $syntax );
@@ -244,7 +236,7 @@ is( ${$template->run()}, '10 11 10 11 ',
     'same-name inner loop-var masks outer loop-var' );
 
 #
-#  32: x.__value__[ z ] instead of z.__value__
+#  31: x.__value__[ z ] instead of z.__value__
 $syntax = "<: for x in y :><: expr x :> => (<: for z in x.__value__ :><: expr z :> => <: expr x.__value__[ z ] :>,<: endfor :>) <: endfor :>";
 $template = Template::Sandbox->new();
 $template->add_var( y =>
@@ -258,7 +250,7 @@ is( ${$template->run()}, 'one => (oneone => ONEONE,onetwo => ONETWO,) three => (
     'loop-var expr subscript of outer loop-var special-value' );
 
 #
-#  33: Ensure op-tree special vars aren't optimized away.
+#  32: Ensure op-tree special vars aren't optimized away.
 $syntax = "<: for x in 4 :><: expr ( x.__counter__ + 1 ) :><: endfor :>";
 $template = Template::Sandbox->new();
 $template->set_template_string( $syntax );
@@ -266,7 +258,7 @@ is( ${$template->run()}, '12345',
     'special vars in op-trees are recognised' );
 
 #
-#  34: Ensure unary-op special vars aren't optimized away.
+#  33: Ensure unary-op special vars aren't optimized away.
 $syntax = "<: for x in 4 :><: expr -x.__counter__ :><: endfor :>";
 $template = Template::Sandbox->new();
 $template->set_template_string( $syntax );
@@ -274,7 +266,7 @@ is( ${$template->run()}, '0-1-2-3-4',
     'special vars in unary-ops are recognised' );
 
 #
-#  35: Ensure function argument special vars aren't optimized away.
+#  34: Ensure function argument special vars aren't optimized away.
 $syntax = "<: for x in 4 :><: expr defined( x.__counter__ ) :><: endfor :>";
 $template = Template::Sandbox->new();
 $template->set_template_string( $syntax );
@@ -282,7 +274,7 @@ is( ${$template->run()}, '11111',
     'special vars in function arguments are recognised' );
 
 #
-#  36: Ensure method argument special vars aren't optimized away.
+#  35: Ensure method argument special vars aren't optimized away.
 $syntax = "<: for x in 4 :><: expr testob.permitted_method_with_args( x.__counter__ ) :><: endfor :>";
 $template = Template::Sandbox->new();
 $template->add_var( testob => Template::Sandbox::TestMethodObject->new() );
@@ -292,7 +284,7 @@ is( ${$template->run()},
     'special vars in method arguments are recognised' );
 
 #
-#  37: Ensure expr subscript special vars aren't optimized away.
+#  36: Ensure expr subscript special vars aren't optimized away.
 $syntax = "<: for x in 4 :><: expr x[ y ] :><: endfor :>";
 $template = Template::Sandbox->new();
 $template->add_var( y => '__counter__' );
