@@ -1,5 +1,21 @@
 Revision history for Template::Sandbox
 
+1.01_07 Version released at 2010-01-27-22:54.  *** Development version. ***
+        Version started at  2010-01-11-15:03.
+        Test case added for defines messing with line/character positions.
+        Correct line/character numbers for changes from define replacement.
+        Added test cases for multiple function registration in constructor.
+        Retired <: for iterator=x set=y :> syntax.
+        Moved void-wrap of assigns from optimization to compile phase.
+        Preallocate large string to template output string for speed.
+        Tightened main instruction loop in run().
+        Removed unused $total_instr variable.
+        Unroll of top of variable stack into own variable during execution.
+        Evil evil and thrice evil optimizations to _eval_var().
+        Use faster procedural rather than OO interface to Digest::MD5().
+        Push count of program length into compile rather than runtime.
+        Push count of variable segment length into compile from eval.
+
 1.01_06 Version released at 2010-01-04-13:40.  *** Development version. ***
         Version started at  2009-12-31-17:43.
         Correction to broken position character counting after newlines.
@@ -71,7 +87,6 @@ Revision history for Template::Sandbox
         Corrected 'no cache modules' test skips.
         Added 0.03 requirement for Log::Any.
         Suggest Cache::Cache 1.00 as recommendation.
-
 
 1.00    Version released at 2009-08-26-13:18.
         Version started at  2009-08-??.
