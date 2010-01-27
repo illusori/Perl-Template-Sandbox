@@ -8,7 +8,7 @@ use Test::More;
 use Template::Sandbox qw/:function_sugar/;
 use Test::Exception;
 
-plan tests => 63;
+plan tests => 73;
 
 #  TODO:  Surely there's a Test:: module for this?
 #         Test::Trap looks to clash with Test::Exception and not old perls.
@@ -40,10 +40,12 @@ sub doesnt_warn( &$ )
 }
     
 my ( $template, $pre_template, $post_template, $function,
-     $syntax, $oldsyntax, $expected );
+     $syntax, $function2, $syntax2, $oldsyntax, $expected );
 
-$function = "nonexistingfunction";
-$syntax = "<: expr ${function}() :>";
+$function  = "nonexistingfunction";
+$syntax    = "<: expr ${function}() :>";
+$function2 = "anothernonexistingfunction";
+$syntax2   = "<: expr ${function2}() :>";
 
 #
 #  1:  Test that the custom function really doesn't exist and causes a fail.
@@ -65,9 +67,44 @@ lives_ok { $template->set_template_string( $syntax ) }
 is( ${$template->run()}, '[during-construction custom function was ere]',
     'run of during-construction custom function' );
 
+#
+#  5-7:  Multiple functions added using separate constructor param.
+ok( $template = Template::Sandbox->new(
+    template_function => [
+        $function =>
+            no_args sub { '[during-construction custom function was ere]' },
+        ],
+    template_function => [
+        $function2 =>
+            no_args sub { '[during-construction custom function2 was ere]' },
+        ],
+    ), 'construct with two custom functions from multiple param' );
+lives_ok { $template->set_template_string( $syntax . $syntax2 ) }
+    'parse with during-construction custom functions from multiple param';
+is( ${$template->run()},
+    '[during-construction custom function was ere]' .
+    '[during-construction custom function2 was ere]',
+    'run of during-construction custom functions from multiple param' );
 
 #
-#  5-7:  Function added after construction.
+#  8-10:  Multiple functions added using single constructor param.
+ok( $template = Template::Sandbox->new(
+    template_function => [
+        $function =>
+            ( no_args sub { '[during-construction custom function was ere]' } ),
+        $function2 =>
+            ( no_args sub { '[during-construction custom function2 was ere]' } ),
+        ],
+    ), 'construct with two customs function from single param' );
+lives_ok { $template->set_template_string( $syntax . $syntax2 ) }
+    'parse with during-construction custom functions from single param';
+is( ${$template->run()},
+    '[during-construction custom function was ere]' .
+    '[during-construction custom function2 was ere]',
+    'run of during-construction custom functions from single param' );
+
+#
+#  11-13:  Function added after construction.
 $template = Template::Sandbox->new();
 lives_ok { $template->register_template_function(
     $function => no_args sub { '[post-construction custom function was ere]' },
@@ -78,7 +115,23 @@ is( ${$template->run()}, '[post-construction custom function was ere]',
     'run of post-construction registered custom function' );
 
 #
-#  8-10:  Check add_template_function synonym.
+#  14-17:  Multiple functions added after construction.
+$template = Template::Sandbox->new();
+lives_ok { $template->register_template_function(
+    $function => no_args sub { '[post-construction custom function was ere]' },
+    ) } 'first post-construct register of multiple custom functions';
+lives_ok { $template->register_template_function(
+    $function2 => no_args sub { '[post-construction custom function2 was ere]' },
+    ) } 'second post-construct register of multiple custom functions';
+lives_ok { $template->set_template_string( $syntax . $syntax2 ) }
+    'parse with multiple post-construction registered custom function';
+is( ${$template->run()},
+    '[post-construction custom function was ere]' .
+    '[post-construction custom function2 was ere]',
+    'run of multiple post-construction registered custom functions' );
+
+#
+#  18-20:  Check add_template_function synonym.
 $template = Template::Sandbox->new();
 lives_ok { $template->add_template_function(
     $function => no_args sub { '[post-construction custom function was ere]' },
@@ -89,7 +142,7 @@ is( ${$template->run()}, '[post-construction custom function was ere]',
     'run of post-construction added custom function' );
 
 #
-#  11-12:  Function unregister.
+#  21-22:  Function unregister.
 $template = Template::Sandbox->new(
     template_function => [
         $function =>
@@ -103,7 +156,7 @@ throws_ok { $template->set_template_string( $syntax ) }
     "verify custom function no-longer exists";
 
 #
-#  13-14:  Function delete synonym.
+#  23-24:  Function delete synonym.
 $template = Template::Sandbox->new(
     template_function => [
         $function =>
@@ -117,7 +170,7 @@ throws_ok { $template->set_template_string( $syntax ) }
     "verify custom function no-longer exists";
 
 #
-#  15-16: Constant single arg to one-arg function.
+#  25-26: Constant single arg to one-arg function.
 $oldsyntax = $syntax;
 $syntax = "<: expr ${function}( 1 ) :>";
 $template = Template::Sandbox->new(
@@ -137,7 +190,7 @@ is( ${$template->run()}, '[one_arg custom function was ere with args: 1]',
 $syntax = $oldsyntax;
 
 #
-#  17-18: Variable single arg to one-arg function.
+#  27-28: Variable single arg to one-arg function.
 $oldsyntax = $syntax;
 $syntax = "<: expr ${function}( a ) :>";
 $template = Template::Sandbox->new(
@@ -158,7 +211,7 @@ is( ${$template->run()}, '[one_arg custom function was ere with args: 45]',
 $syntax = $oldsyntax;
 
 #
-#  19-20: Constant arg to two-arg function.
+#  29-30: Constant arg to two-arg function.
 $oldsyntax = $syntax;
 $syntax = "<: expr ${function}( 1, 2 ) :>";
 $template = Template::Sandbox->new(
@@ -178,7 +231,7 @@ is( ${$template->run()}, '[two_args custom function was ere with args: 1,2]',
 $syntax = $oldsyntax;
 
 #
-#  21-22: Variable args to two-arg function.
+#  31-32: Variable args to two-arg function.
 $oldsyntax = $syntax;
 $syntax = "<: expr ${function}( a, b ) :>";
 $template = Template::Sandbox->new(
@@ -199,7 +252,7 @@ is( ${$template->run()}, '[two_args custom function was ere with args: 45,19]',
 $syntax = $oldsyntax;
 
 #
-#  23-24: Constant arg to three-arg function.
+#  33-34: Constant arg to three-arg function.
 $oldsyntax = $syntax;
 $syntax = "<: expr ${function}( 1, 2, 5 ) :>";
 $template = Template::Sandbox->new(
@@ -220,7 +273,7 @@ is( ${$template->run()},
 $syntax = $oldsyntax;
 
 #
-#  25-26: Variable args to three-arg function.
+#  35-36: Variable args to three-arg function.
 $oldsyntax = $syntax;
 $syntax = "<: expr ${function}( a, b, c ) :>";
 $template = Template::Sandbox->new(
@@ -242,7 +295,7 @@ is( ${$template->run()},
 $syntax = $oldsyntax;
 
 #
-#  27: No args to one-arg function.
+#  37: No args to one-arg function.
 $oldsyntax = $syntax;
 $syntax = "<: expr ${function}() :>";
 $template = Template::Sandbox->new(
@@ -261,7 +314,7 @@ throws_ok { $template->set_template_string( $syntax ) }
 $syntax = $oldsyntax;
 
 #
-#  28: Two args to one-arg function.
+#  38: Two args to one-arg function.
 $oldsyntax = $syntax;
 $syntax = "<: expr ${function}( 1, 2 ) :>";
 $template = Template::Sandbox->new(
@@ -280,7 +333,7 @@ throws_ok { $template->set_template_string( $syntax ) }
 $syntax = $oldsyntax;
 
 #
-#  29-30: construct-option function instance locality testing
+#  39-40: construct-option function instance locality testing
 $pre_template = Template::Sandbox->new();
 $template = Template::Sandbox->new(
     template_function => [
@@ -297,7 +350,7 @@ throws_ok { $post_template->set_template_string( $syntax ) }
     "construct-option instance-function doesn't exist in new instances";
 
 #
-#  31-32: post-construct function instance locality testing
+#  41-42: post-construct function instance locality testing
 $pre_template = Template::Sandbox->new();
 $template = Template::Sandbox->new();
 $template->register_template_function(
@@ -312,7 +365,7 @@ throws_ok { $post_template->set_template_string( $syntax ) }
     "post-construct instance-function doesn't exist in new instances";
 
 #
-#  33-39: class-method testing
+#  43-49: class-method testing
 $pre_template = Template::Sandbox->new();
 lives_ok { Template::Sandbox->register_template_function(
     $function => no_args sub { '[class-method custom function was ere]' },
@@ -335,7 +388,7 @@ throws_ok { $template->set_template_string( $syntax ) }
     'verify class-method custom function was removed';
 
 #
-#  40-42:  needs_template testing
+#  50-52:  needs_template testing
 #  TODO:  check it's _our_ template
 ok( $template = Template::Sandbox->new(
     template_function => [
@@ -352,7 +405,7 @@ is( ${$template->run()}, '[needs_template function got a: Template::Sandbox]',
     'run of needs_template custom function' );
 
 #
-#  43:  non-constant needs_template function.
+#  53:  non-constant needs_template function.
 $oldsyntax = $syntax;
 $syntax = "<: expr ${function}( a ) :>";
 $template = Template::Sandbox->new(
@@ -372,7 +425,7 @@ is( ${$template->run()}, '[needs_template function got: Template::Sandbox, 12]',
 $syntax = $oldsyntax;
 
 #
-#  44-45:  warnings on remove of non-existing function
+#  54-55:  warnings on remove of non-existing function
 $template = Template::Sandbox->new();
 {
     local $^W = 1;
@@ -387,7 +440,7 @@ $template = Template::Sandbox->new();
 }
 
 #
-#  46-47:  warnings on add of existing function
+#  56-57:  warnings on add of existing function
 $template = Template::Sandbox->new();
 $template->register_template_function(
     $function => no_args sub { '[post-construction custom function was ere]' },
@@ -417,7 +470,7 @@ $template->register_template_function(
 }
 
 #
-#  48: Does local instance-function mask class-function?
+#  58: Does local instance-function mask class-function?
 Template::Sandbox->register_template_function(
     $function => no_args sub { '[class-method custom function was ere]' },
     );
@@ -431,7 +484,7 @@ is( ${$template->run()}, '[instance-method custom function was ere]',
 Template::Sandbox->unregister_template_function( $function );
 
 #
-#  49: undef args produce warning
+#  59: undef args produce warning
 $oldsyntax = $syntax;
 $syntax = "<: expr $function( a ) :>";
 $template = Template::Sandbox->new();
@@ -445,7 +498,7 @@ warns_ok { $template->run(); }
 $syntax = $oldsyntax;
 
 #
-#  50: undef_ok prevents undef args warning
+#  60: undef_ok prevents undef args warning
 $oldsyntax = $syntax;
 $syntax = "<: expr $function( a ) :>";
 $template = Template::Sandbox->new();
@@ -459,7 +512,7 @@ doesnt_warn { $template->run(); }
 $syntax = $oldsyntax;
 
 #
-#  51: hashref function definition args to constructor.
+#  61: hashref function definition args to constructor.
 throws_ok
     {
         $template = Template::Sandbox->new(
@@ -473,7 +526,7 @@ throws_ok
     'error on hashref definition in construct-option function';
 
 #
-#  52: bad function definition args to constructor.
+#  62: bad function definition args to constructor.
 throws_ok
     {
         $template = Template::Sandbox->new(
@@ -487,7 +540,7 @@ throws_ok
     'error on scalar definition in construct-option function';
 
 #
-#  53: hashref function definition args to register method.
+#  63: hashref function definition args to register method.
 $template = Template::Sandbox->new();
 throws_ok
     {
@@ -499,7 +552,7 @@ throws_ok
     'error on hashref definition in post-construct function';
 
 #
-#  54: hashref function definition args to register method.
+#  64: hashref function definition args to register method.
 $template = Template::Sandbox->new();
 throws_ok
     {
@@ -511,7 +564,7 @@ throws_ok
     'error on scalar definition in post-construct function';
 
 #
-#  55: raw sub register autoapplies function sugar.
+#  65: raw sub register autoapplies function sugar.
 $oldsyntax = $syntax;
 $syntax = "<: expr ${function}( 1, 2 ) :>";
 $template = Template::Sandbox->new(
@@ -530,7 +583,7 @@ is( ${$template->run()}, '[raw-sub custom function was ere with args: 1,2]',
 $syntax = $oldsyntax;
 
 #
-#  56: error on run of instance function removed after compile
+#  66: error on run of instance function removed after compile
 $oldsyntax = $syntax;
 $syntax = "<: expr ${function}( a ) :>";
 $template = Template::Sandbox->new();
@@ -546,7 +599,7 @@ throws_ok { $template->run() }
 $syntax = $oldsyntax;
 
 #
-#  57: error on run of class function removed after compile
+#  67: error on run of class function removed after compile
 $oldsyntax = $syntax;
 $syntax = "<: expr ${function}( a ) :>";
 Template::Sandbox->register_template_function(
@@ -562,7 +615,7 @@ throws_ok { $template->run() }
 $syntax = $oldsyntax;
 
 #
-#  58-59: copy_global_functions tests.
+#  68-69: copy_global_functions tests.
 $oldsyntax = $syntax;
 $syntax = "<: expr ${function}( a ) :>";
 Template::Sandbox->register_template_function(
@@ -580,7 +633,7 @@ lives_and { is ${$template->run()}, '[class-method custom function was ere]' }
 $syntax = $oldsyntax;
 
 #
-#  60:  return ref to scalar (const func)
+#  70:  return ref to scalar (const func)
 $template = Template::Sandbox->new();
 $template->register_template_function(
     $function => no_args sub
@@ -594,7 +647,7 @@ is( ${$template->run()}, '[return-by-reference custom function was ere]',
     'constant custom function returning scalar-reference' );
 
 #
-#  61:  return ref to scalar (inconst func)
+#  71:  return ref to scalar (inconst func)
 $oldsyntax = $syntax;
 $syntax = "<: expr ${function}( a ) :>";
 $template = Template::Sandbox->new();
@@ -612,7 +665,7 @@ is( ${$template->run()}, '[return-by-reference custom function was ere]',
 $syntax = $oldsyntax;
 
 #
-#  62: apparantly-constant function optimization.
+#  72: apparantly-constant function optimization.
 $oldsyntax = $syntax;
 $syntax = "<: for x in 3 :>\nOn loop <: expr x :> function returns: <: expr ${function}() :>\n<: end for :>\n";
 $template = Template::Sandbox->new();
@@ -641,7 +694,7 @@ is( ${$template->run()}, $expected,
 $syntax = $oldsyntax;
 
 #
-#  63: inconstant function-sugar on apparantly-constant function
+#  73: inconstant function-sugar on apparantly-constant function
 $oldsyntax = $syntax;
 $syntax = "<: for x in 3 :>\nOn loop <: expr x :> function returns: <: expr ${function}() :>\n<: end for :>\n";
 $template = Template::Sandbox->new();
@@ -671,5 +724,3 @@ $syntax = $oldsyntax;
 
 #  TODO: call non-existing function when different local function added
 #  TODO: call non-existing function when different class function added
-#  TODO: multiple custom functions as single constructor param
-#  TODO: multiple custom functions as multiple constructor param
