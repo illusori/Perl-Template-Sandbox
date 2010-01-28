@@ -529,7 +529,7 @@ BEGIN
 {
     use Exporter   ();
 
-    $Template::Sandbox::VERSION     = '1.01_07';
+    $Template::Sandbox::VERSION     = '1.01_08';
     @Template::Sandbox::ISA         = qw( Exporter );
 
     @Template::Sandbox::EXPORT      = qw();
@@ -886,7 +886,7 @@ sub get_include_candidates
     my ( $self, $filename, $current_dir ) = @_;
 
     #  TODO:  probably should use File::Spec.
-    return( $current_dir . '/' . $filename );
+    return( ( $current_dir ? ( $current_dir . '/' ) : '' ) . $filename );
 }
 
 sub find_template
@@ -3767,7 +3767,7 @@ See the section L</"Custom Template Syntaxes"> for more details.
 
 =over
 
-=item B<< $template->new( >> I<< %options >> B<)>
+=item B<< $template = Template::Sandbox->new( >> I<< %options >> B<)>
 
 This is the constructor for L<Template::Sandbox>, it will return
 a newly constructed template object, or throw an exception explaining
