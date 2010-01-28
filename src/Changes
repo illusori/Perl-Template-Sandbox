@@ -1,5 +1,10 @@
 Revision history for Template::Sandbox
 
+1.01_08 Version released at 2010-01-28-21:07.  *** Development version. ***
+        Version started at  2010-01-28-21:02.
+        get_include_candidates() copes gracefully without $current_dir.
+        Documentation corrections.
+
 1.01_07 Version released at 2010-01-27-22:54.  *** Development version. ***
         Version started at  2010-01-11-15:03.
         Test case added for defines messing with line/character positions.
