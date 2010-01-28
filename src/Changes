@@ -1,5 +1,11 @@
 Revision history for Template::Sandbox
 
+1.01_09 Version released at 2010-01-28-21:26.  *** Development version. ***
+        Version started at  2010-01-28-21:22.
+        Previous issue was _really_ that $current_dir shouldn't have
+        been undefined in the first place... silly path-finding regexp.
+        Now uses File::Spec for all directory/filename fiddling.
+
 1.01_08 Version released at 2010-01-28-21:07.  *** Development version. ***
         Version started at  2010-01-28-21:02.
         get_include_candidates() copes gracefully without $current_dir.
