@@ -19,6 +19,7 @@ use Clone;
 use Data::Dumper;
 use Digest::MD5;
 use IO::File;
+use File::Spec;
 use Log::Any;
 use Scalar::Util;
 use Storable;
@@ -529,7 +530,7 @@ BEGIN
 {
     use Exporter   ();
 
-    $Template::Sandbox::VERSION     = '1.01_08';
+    $Template::Sandbox::VERSION     = '1.01_09';
     @Template::Sandbox::ISA         = qw( Exporter );
 
     @Template::Sandbox::EXPORT      = qw();
@@ -875,9 +876,8 @@ sub get_template_candidates
 {
     my ( $self, $filename, $current_dir ) = @_;
 
-    #  TODO:  probably should use File::Spec.
-    return( ( $self->{ template_root } ?
-        ( $self->{ template_root } . '/' ) : '' ) .
+    return( $self->{ template_root } ?
+        File::Spec->catfile( $self->{ template_root }, $filename ) :
         $filename );
 }
 
@@ -885,8 +885,9 @@ sub get_include_candidates
 {
     my ( $self, $filename, $current_dir ) = @_;
 
-    #  TODO:  probably should use File::Spec.
-    return( ( $current_dir ? ( $current_dir . '/' ) : '' ) . $filename );
+    return( $current_dir ?
+        File::Spec->catfile( $current_dir, $filename ) :
+        $filename );
 }
 
 sub find_template
@@ -1866,12 +1867,13 @@ sub _compile_template
                 #  exists or not.
                 if( $filename = $args->{ filename } )
                 {
-                    my ( $current_dir );
+                    my ( $volume, $current_dir );
 
                     delete $args->{ filename };
 
-                    ( $current_dir ) =
-                        ( $define_stack[ 0 ]->{ FILENAME } =~ /^(.*)\// );
+                    #  Hmm, we discard $volume, could be a problem.
+                    ( $volume, $current_dir ) = File::Spec->splitpath(
+                        $define_stack[ 0 ]->{ FILENAME } );
 
                     %defines = %{$define_stack[ 0 ]};
 
