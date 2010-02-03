@@ -530,7 +530,7 @@ BEGIN
 {
     use Exporter   ();
 
-    $Template::Sandbox::VERSION     = '1.01_09';
+    $Template::Sandbox::VERSION     = '1.01_10';
     @Template::Sandbox::ISA         = qw( Exporter );
 
     @Template::Sandbox::EXPORT      = qw();
@@ -1440,8 +1440,6 @@ sub _read_template
     #  Replace any preprocessor defines.
     $template = $self->_replace_defines( $template, $defines );
 
-#$self->warning( "Template becomes: $template" ) if $filename =~ /item_blueprint_activity_times_manufacturing.html/;
-
     return( $template );
 }
 
@@ -1641,12 +1639,6 @@ sub _compile_template
                 if $token_aliases{ $token };
             $syntax = $local_syntaxes->{ $token } || $syntaxes{ $token };
 
-#if( $includes{ 'user/top_nav' } and not $dumpme )
-#{
-#use CGI;
-#print CGI->header('text/plain');
-#$dumpme = 1;
-#}
             #  Fudge things a little so that flow-control tokens
             #  on a line by themselves don't produce a bunch of
             #  empty lines in the output.
@@ -1871,9 +1863,12 @@ sub _compile_template
 
                     delete $args->{ filename };
 
-                    #  Hmm, we discard $volume, could be a problem.
                     ( $volume, $current_dir ) = File::Spec->splitpath(
                         $define_stack[ 0 ]->{ FILENAME } );
+                    #  Make sure volume is part of the current dir so
+                    #  windows doesn't choke.
+                    $current_dir = File::Spec->catpath(
+                        $volume, $current_dir, '' );
 
                     %defines = %{$define_stack[ 0 ]};
 
