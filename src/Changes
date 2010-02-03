@@ -1,5 +1,10 @@
 Revision history for Template::Sandbox
 
+1.01_10 Version released at 2010-02-03-05:44.  *** Development version. ***
+        Version started at  2010-02-03-05:40.
+        Do not discard drive letter when building current_dir for includes
+        on windows platforms. Should fixed recursive include tests.
+
 1.01_09 Version released at 2010-01-28-21:26.  *** Development version. ***
         Version started at  2010-01-28-21:22.
         Previous issue was _really_ that $current_dir shouldn't have
