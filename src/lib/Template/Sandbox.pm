@@ -530,7 +530,7 @@ BEGIN
 {
     use Exporter   ();
 
-    $Template::Sandbox::VERSION     = '1.01_10';
+    $Template::Sandbox::VERSION     = '1.01_11';
     @Template::Sandbox::ISA         = qw( Exporter );
 
     @Template::Sandbox::EXPORT      = qw();
@@ -1311,6 +1311,13 @@ sub merge_vars
     {
         $self->merge_var( $var, $vars->{ $var } );
     }
+}
+
+sub clear_vars
+{
+    my ( $self ) = @_;
+
+    $self->{ vars } = {};
 }
 
 sub _escape_string
@@ -3957,6 +3964,13 @@ get appended to, and hashrefs "have any missing entries filled in":
 
 For each key and value in the hashref I<$vars>, perform a
 C<< $template->merge_var() >> with that key and value.
+
+=item B<< $template->clear_vars() >>
+
+Clears all I<template variables> that have been added so far, as if
+no I<template variables> had been added at all.
+
+This method added in version 1.01_11 of L<Template::Sandbox>.
 
 =item B<< $template->run() >>
 
