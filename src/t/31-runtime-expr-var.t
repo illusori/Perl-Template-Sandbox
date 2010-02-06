@@ -8,7 +8,7 @@ use Test::More;
 use Template::Sandbox;
 use Test::Exception;
 
-plan tests => 22;
+plan tests => 24;
 
 my ( $template, $syntax );
 
@@ -240,3 +240,25 @@ $template->set_template_string( $syntax );
 throws_ok { $template->run() }
     qr/Template runtime error: Can't index array-reference with string 'index index index' \(from 'b'\) in 'a\[ b \]' at line 1, char 1 of/,
     'error on string index of array ref';
+
+#
+#  23: clear_vars() before compile removes var
+$syntax = "<: expr a :>";
+$template = Template::Sandbox->new();
+$template->add_var( a => 42 );
+$template->clear_vars();
+$template->set_template_string( $syntax );
+warns_ok { $template->run() }
+    qr/Template runtime error: undefined template value 'a' at line 1, char 1 of/,
+    'clear_vars() before compile remove var';
+
+#
+#  24: clear_vars() after compile removes var
+$syntax = "<: expr a :>";
+$template = Template::Sandbox->new();
+$template->add_var( a => 42 );
+$template->set_template_string( $syntax );
+$template->clear_vars();
+warns_ok { $template->run() }
+    qr/Template runtime error: undefined template value 'a' at line 1, char 1 of/,
+    'clear_vars() after compile remove var';
