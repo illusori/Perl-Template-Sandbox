@@ -1,5 +1,10 @@
 Revision history for Template::Sandbox
 
+1.01_11 Version released at 2010-02-06-15:55.  *** Development version. ***
+        Version started at  2010-02-04-09:21.
+        Added clear_vars().
+        Added tests for clear_vars().
+
 1.01_10 Version released at 2010-02-03-05:44.  *** Development version. ***
         Version started at  2010-02-03-05:40.
         Do not discard drive letter when building current_dir for includes
