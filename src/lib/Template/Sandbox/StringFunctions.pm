@@ -7,7 +7,7 @@ use base 'Template::Sandbox::Library';
 
 use Template::Sandbox qw/:function_sugar/;
 
-$Template::Sandbox::StringFunctions::VERSION = '1.01_10';
+$Template::Sandbox::StringFunctions::VERSION = '1.01_11';
 
 __PACKAGE__->set_library_functions(
     lc      => ( one_arg sub { lc( $_[ 0 ] ) } ),
