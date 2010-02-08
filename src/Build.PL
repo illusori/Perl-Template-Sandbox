@@ -10,6 +10,7 @@ my $build = Module::Build->new(
     license      => 'perl',
     dist_author  => 'Sam Graham <libtemplate-sandbox-perl@illusori.co.uk>',
     build_requires => {
+        'Cwd'              => 0,
         'FindBin'          => 0,
         'Module::Build'    => 0.07,
         'Test::More'       => 0,
