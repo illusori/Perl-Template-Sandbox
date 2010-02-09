@@ -1,5 +1,25 @@
 Revision history for Template::Sandbox
 
+1.02    Version released at 2010-02-09-09:39.
+        Version started at  2010-02-09-09:33.
+        Released rc 1.01_11 as 1.02 stable.
+
+        Summary of changes since 1.01:
+
+        COMPAT BUSTERS:
+            $current_dir no-longer defaults to Cwd::cwd() when
+            find_template() is called, instead an undef value will be passed:
+            if you need the cwd you can work it out yourself.
+
+        Additions:
+            clear_vars() method added.
+
+        Enhancements:
+            Improved support for windows.
+            Improved support for localized perls in the test-suite.
+            Optimizatons to performance throughout.
+            Documentation improvements.
+
 1.01_11 Version released at 2010-02-06-15:55.  *** Development version. ***
         Version started at  2010-02-04-09:21.
         Added clear_vars().
