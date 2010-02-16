@@ -18,7 +18,7 @@ use Test::Exception;
 #    { unless . } { elsif .       } { else } { end if     }
 #                 { elseif .      }          { endunless  }
 #                 { else if .     }          { end unless }
-#                 { elsunless .   }
+#                 { elsunless .   }          { end        }
 #                 { elseunless .  }
 #                 { else unless . }
 #  Combinations of:
@@ -26,6 +26,7 @@ use Test::Exception;
 #    { foreach . in . } { end for     }
 #                       { endforeach  }
 #                       { end foreach }
+#                       { end         }
 #  TODO:
 #    include .
 
@@ -46,9 +47,9 @@ my ( $num_basic_tests, $num_if_tests, $num_for_tests );
               'elsunless y', 'elseunless y', 'else unless y',
             );
 @if_three = ( '', 'else', 'elsif z', );
-@if_four  = ( 'endif', 'end if', 'endunless', 'end unless' );
-@for_one  = ( 'for x in y', 'foreach x in y' );
-@for_two  = ( 'endfor', 'end for', 'endforeach', 'end foreach' );
+@if_four  = ( 'endif', 'end if', 'endunless', 'end unless', 'end', );
+@for_one  = ( 'for x in y', 'foreach x in y', );
+@for_two  = ( 'endfor', 'end for', 'endforeach', 'end foreach', 'end', );
 
 $num_basic_tests = scalar( @basic_syntaxes );
 $num_if_tests    = scalar( @if_one ) * scalar( @if_two ) *
