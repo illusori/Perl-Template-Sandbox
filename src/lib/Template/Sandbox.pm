@@ -726,8 +726,9 @@ sub get_valid_singular_constructor_param
 {
     my ( $self ) = @_;
 
-    return( qw/template cache logger template_root
-        ignore_module_dependencies open_delimiter close_delimiter/ );
+    return( qw/template cache logger template_root allow_bare_expr
+        ignore_module_dependencies open_delimiter close_delimiter
+        template_toolkit_compat/ );
 }
 
 sub get_valid_multiple_constructor_param
@@ -830,10 +831,22 @@ sub initialize
         $param->{ ignore_module_dependencies }
         if exists $param->{ ignore_module_dependencies };
 
+    if( $param->{ template_toolkit_compat } )
+    {
+        $self->{ open_delimiter }  = '[%'
+            unless exists $param->{ open_delimiter };
+        $self->{ close_delimiter } = '%]'
+            unless exists $param->{ close_delimiter };
+        $self->{ allow_bare_expr } = 1
+            unless exists $param->{ allow_bare_expr };
+    }
+
     $self->{ open_delimiter } = $param->{ open_delimiter }
         if exists $param->{ open_delimiter };
     $self->{ close_delimiter } = $param->{ close_delimiter }
         if exists $param->{ close_delimiter };
+    $self->{ allow_bare_expr } = $param->{ allow_bare_expr }
+        if exists $param->{ allow_bare_expr };
 
     $self->set_cache( $param->{ cache } )
         if exists $param->{ cache };
@@ -1557,7 +1570,7 @@ sub _compile_template
     my ( $i, @hunks, @files, @pos_stack, @nest_stack, @compiled, %includes,
          %trim, $trim_next, %file_numbers, @define_stack,
          $local_syntaxes, $local_token_aliases, $local_syntax_regexp,
-         $hunk_regexp,
+         $hunk_regexp, $syntax_regexp,
          $open_delimiter, $close_delimiter, $open_regexp, $close_regexp );
 
     @files           = ( $self->{ filename } );
@@ -1600,17 +1613,21 @@ sub _compile_template
             values( %{$syntaxes{ '.instr' }} ) ) );
     $local_syntax_regexp = ' | ' . $local_syntax_regexp
         if $local_syntax_regexp;
-    $hunk_regexp = qr/^$open_regexp \s*
-        (
+
+    $syntax_regexp = qr/(
           var | expr |
           (?:if|unless) | else? \s* (?:if|unless) | else |
           end \s* (?:if|unless) |
-          for(?:each)? | end \s* for(?:each)? |
+          for(?:each)? | end \s* for(?:each)? | end |
           include | end \s* include |
           \# |
           debug
           $local_syntax_regexp
-        ) \s+ (.*?) \s* $close_regexp (.+)? $/sx;
+        ) \s+
+        /ix;
+    $syntax_regexp = qr/(?:$syntax_regexp)?/ if $self->{ allow_bare_expr };
+    $hunk_regexp = qr/^$open_regexp \s*
+         $syntax_regexp (.*?) \s* $close_regexp (.+)? $/sx;
 
     @hunks = split( /(?=$open_regexp)/s, $self->{ template }, -1 );
     delete $self->{ template };
@@ -1633,7 +1650,7 @@ sub _compile_template
         {
             my ( $token, $syntax, $args, $rest );
 
-            $token = $1;
+            $token = lc( $1 || 'expr' );
             $args  = $2;
             $rest  = $3;
 
@@ -1650,6 +1667,14 @@ sub _compile_template
             }
 
             $token =~ s/\s+/ /go;
+
+            if( $token eq 'end' )
+            {
+                $self->error( "end found without opening block" )
+                    if $#nest_stack == -1;
+                $token = ( $nest_stack[ 0 ][ 0 ] eq FOR ) ?
+                    'endfor' : 'endif';
+            }
 
             $token = $local_token_aliases->{ $token }
                 if $local_token_aliases->{ $token };
@@ -1830,7 +1855,7 @@ sub _compile_template
                 my ( $iterator, $set );
 
                 #  TODO: syntax checking/error check needed here.
-                ( $iterator, $set ) = $args =~ /^(.*) in (.*)$/o;
+                ( $iterator, $set ) = $args =~ /^(.*) in (.*)$/io;
 
                 push @compiled,
                     [ FOR, $pos, undef, $iterator,
@@ -3585,7 +3610,7 @@ L<Template::Sandbox> is Yet Another Templating module, designed primarily
 for use in a webserver environment but usable anywhere, providing a more
 secure "sandboxed" environment than most templating systems.
 
-The core design philosiphy for L<Template::Sandbox> is that the template
+The core design philosophy for L<Template::Sandbox> is that the template
 logic should have no access outside the template beyond that which you
 choose to permit it, this is frequently known as sandboxing.
 
@@ -3600,6 +3625,10 @@ two systems - your template authors can't reach into the application's
 internal-only data, and so your application developers can change that
 internal data without worrying that the templates will stop working or
 expose confidential information.
+
+L<Template::Sandbox> also provides exceptional performance, ranking among
+the fastest of the fully-featured template engines that don't rely on
+embedding perl within the templates.
 
 L<Template::Sandbox> also provides the usual gamut of behaviours and
 optional features: caching compiled templates, includes, flow control,
@@ -3791,18 +3820,65 @@ and end of a I<template token>.
 By default the opening delimiter is C<< <: >> and the closing delimiter
 is C<< :> >>.
 
-For example, to make L<Template::Toolkit> people feel a bit more at
-home (or to confuse them even more by the different syntax):
+=item B<allow_bare_expr> => I<0> | I<1>
+
+If set to a true value, this allows the C<expr> token to be ommited from
+I<template expressions>.
+
+By default this is turned off.
+
+For example:
+
+  $template = Template::Sandbox->new(
+      allow_bare_expr => 1,
+      );
+  $template->add_var( a => 'a is a fine letter' );
+  #  This would usually be a syntax error:
+  $template->set_template_string( '<: a :>' );
+  print ${$template->run()};
+
+  #  Output:
+  a is a fine letter
+
+=item B<template_toolkit_compat> => I<0> | I<1>
+
+If set to a true value, this in turn sets several other constructor
+options to provide a degree of compatibility with the syntax of
+L<Template::Toolkit>, easing a transition to L<Template::Sandbox>.
+
+By default this is turned off.
+
+The options currently set make these two lines equivilent:
+
+  $template = Template::Sandbox->new(
+      template_toolkit_compat => 1,
+      );
+
+  #  is shorthand for
 
   $template = Template::Sandbox->new(
       open_delimiter  => '[%',
       close_delimiter => '%]',
+      allow_bare_expr => 1,
+      );
+
+If you provide values explictly for any of these constructor options, then
+the values you have set will be used rather than those provided by
+C<template_toolkit_compat>.
+
+More compatibility options may be added and set by this option in
+the future.
+
+Here's an example of it in use:
+
+  $template = Template::Sandbox->new(
+      template_toolkit_compat => 1,
       );
   $template->add_var( list => [ 1, 2, 4, 5, ] );
   $template->set_template_string( <<'END_OF_TEMPLATE' );
   [% FOREACH v IN list %]
-  [% EXPR v %]
-  [% ENDFOR %]
+  [% v %]
+  [% END %]
   END_OF_TEMPLATE
   print ${$template->run()};
 
@@ -3811,6 +3887,19 @@ home (or to confuse them even more by the different syntax):
   2
   4
   5
+
+Some incompatable gotchas are:
+
+C<iterator.key> and C<iterator.value> in hash loops need to change to
+C<iterator> and C<iterator.__value__>.
+
+Vmethods will need rewriting as function calls, possibly with intermediate
+assignment to variables instead of chaining them.
+
+Any feature of L<Template::Toolkit> that doesn't have a corressponding
+feature in L<Template::Sandbox> will also be unsupported.
+
+Still, it may ease the pain if you're converting simple templates.
 
 =back
 
@@ -4078,6 +4167,18 @@ each element in the I<group> array or hash and substitutes the
 I<< loop content >> into the template output each time.
 
 See L</"LOOPS> for further details.
+
+=item B<< <: end :> >>
+
+The C<end> statement terminates the current C<if>, C<for> or C<foreach>
+statement as if the corressponding C<endif> or C<endfor> statement was
+provided.
+
+This statement is mostly provided for people used to the syntax
+of L<Template::Toolkit>.  You are strongly encouraged to use C<endif>
+or C<endfor> instead, as it makes it far easier to debug that
+you've got the wrong closing statement in the wrong place if your
+if blocks and for loops don't all have the same ending statement.
 
 =item B<< <: include >> I<< filename >> B<< :> >>
 
@@ -5896,21 +5997,21 @@ This is detailed further in L</"KNOWN ISSUES AND BUGS">.
 
 =head2 Metrics
 
-Here's a dump of some raw metrics from a modified version of
-the L<Template::Alloy> benchmark script.
+Here's a dump of some raw metrics from the L<benchmark_template_engines>
+script provided by L<Template::Benchmark>.
 
-The script was modified to run for 30 CPU seconds instead of 2,
-and to run a much longer (thirty-times!) template, to
-simulate the heavy-usage situation I was testing for. (My initial
-results showed a somewhat unfair advantage for L<Template::Sandbox>
-because of the use of better caching modules vs the internal
-caching methods of other systems, so I extended the length of the
-template to get a better metric of template-processing performance.)
+I'll state up front that I'm also the author of L<Template::Benchmark>,
+and while I endeavour to make it give unbiased results, I wouldn't
+want anyone thinking I was trying to pass it off as an independent
+evaluation. :)
 
 Also note that the template is a very simple template making little
 use of the advanced features of many of the template systems, since
-not all systems support equivilent features, notably it consists only
-of top-level variable substitutions, loops and literal text.
+not all systems support equivilent features, this benchmark is the
+result of the "lowest common denominator" set of features, if you
+want to check performance of a specific set of features, I heartily
+(and shamelessly self-promotingly) recommend investigating
+L<Template::Benchmark>.
 
 I make no claims for how representive these numbers are of any
 particular real-world situation, and it should be taken as read
@@ -5922,157 +6023,129 @@ With that disclaimer said, the results do seem reasonable and give
 a broad indication of strengths and weaknesses of some systems, so
 here's the data.
 
-  Output of ~/projects/Template-Sandbox/bin/bench_various_templaters.pl
-  HTC_file - HTML::Template::Compiled - (Loaded from file)
-  HTC_mem - HTML::Template::Compiled - (Compiled in memory)
-  HTC_str - HTML::Template::Compiled - (From string ref - cached if possible)
-  HTE_mem - HTML::Template::Expr - (Compiled in memory)
-  HTE_str - HTML::Template::Expr - (From string ref - cached if possible)
-  HTJ_mem - HTML::Template::JIT - Compiled to C template - (Compiled in memory)
-  HTP_mem - HTML::Template::Pro - (Compiled in memory)
-  HTP_str - HTML::Template::Pro - (From string ref - cached if possible)
-  HT_file - HTML::Template - (Loaded from file)
-  HT_mem - HTML::Template - (Compiled in memory)
-  HT_str - HTML::Template - (From string ref - cached if possible)
-  TA_H_NOCACHE_str - Template::Alloy with string ref caching off using HTML::Template interface - (From string ref - cached if possible)
-  TA_H_file - Template::Alloy using HTML::Template interface - (Loaded from file)
-  TA_H_mem - Template::Alloy using HTML::Template interface - (Compiled in memory)
-  TA_H_str - Template::Alloy using HTML::Template interface - (From string ref - cached if possible)
-  TA_NOCACHE_str - Template::Alloy with string ref caching off using process_simple - (From string ref - cached if possible)
-  TA_PS_mem - Template::Alloy - Perl code eval based using process_simple - (Compiled in memory)
-  TA_P_file - Template::Alloy - Perl code eval based - (Loaded from file)
-  TA_P_mem - Template::Alloy - Perl code eval based - (Compiled in memory)
-  TA_S_file - Template::Alloy::XS using TT interface using process_simple - (Loaded from file)
-  TA_file - Template::Alloy using TT interface - (Loaded from file)
-  TA_mem - Template::Alloy using TT interface - (Compiled in memory)
-  TA_str - Template::Alloy using TT interface - (From string ref - cached if possible)
-  TMPL_file - Text::Tmpl - Engine is C based - (Loaded from file)
-  TMPL_str - Text::Tmpl - Engine is C based - (From string ref - cached if possible)
-  TS_CF_file - Template::Sandbox - with Cache::CacheFactory - (Loaded from file)
-  TS_CF_mem - Template::Sandbox - with Cache::CacheFactory - (Compiled in memory)
-  TS_CHIMM_file - Template::Sandbox - with CHI FastMmap - (Loaded from file)
-  TS_CHI_file - Template::Sandbox - with CHI - (Loaded from file)
-  TS_CHI_mem - Template::Sandbox - with CHI - (Compiled in memory)
-  TS_CMM_file - Template::Sandbox - with Cache::FastMmap - (Loaded from file)
-  TS_str - Template::Sandbox - (From string ref - cached if possible)
-  TTXCET_str - Template::Toolkit with Stash::XS and Template::Parser::CET - (From string ref - cached if possible)
-  TTX_file - Template::Toolkit with Stash::XS - (Loaded from file)
-  TTX_mem - Template::Toolkit with Stash::XS - (Compiled in memory)
-  TTX_str - Template::Toolkit with Stash::XS - (From string ref - cached if possible)
-  TT_file - Template::Toolkit - (Loaded from file)
-  TT_mem - Template::Toolkit - (Compiled in memory)
-  TT_str - Template::Toolkit - (From string ref - cached if possible)
-  TextTemplate_str - Text::Template - Perl code eval based - (From string ref - cached if possible)
-  ---Match Run Through----------------------------------------------------
-    All test output matched!
-  ---STR------------------------------------------------------------------
-  From a string or scalarref tests
-  Benchmark: running HT, HTC, HTE, HTP, TA, TA_H, TA_H_NOCACHE, TA_NOCACHE, TMPL, TS, TT, TTX, TTXCET, TextTemplate for at least 30 CPU seconds...
-          HT: 31 wallclock secs (31.54 usr +  0.00 sys = 31.54 CPU) @ 51.30/s (n=1618)
-         HTC: 33 wallclock secs (32.47 usr +  0.01 sys = 32.48 CPU) @ 11.51/s (n=374)
-         HTE: 32 wallclock secs (31.52 usr +  0.00 sys = 31.52 CPU) @ 13.17/s (n=415)
-         HTP: 31 wallclock secs (31.02 usr +  0.01 sys = 31.03 CPU) @ 2719.30/s (n=84380)
-          TA: 31 wallclock secs (31.50 usr +  0.00 sys = 31.50 CPU) @ 155.24/s (n=4890)
-        TA_H: 32 wallclock secs (31.56 usr +  0.00 sys = 31.56 CPU) @ 198.35/s (n=6260)
-  TA_H_NOCACHE: 32 wallclock secs (31.51 usr +  0.00 sys = 31.51 CPU) @ 79.72/s (n=2512)
-  TA_NOCACHE: 32 wallclock secs (31.58 usr +  0.00 sys = 31.58 CPU) @ 63.14/s (n=1994)
-        TMPL: 32 wallclock secs (31.72 usr +  0.07 sys = 31.79 CPU) @ 1297.92/s (n=41261)
-          TS: 32 wallclock secs (31.62 usr +  0.00 sys = 31.62 CPU) @ 37.00/s (n=1170)
-          TT: 31 wallclock secs (31.45 usr +  0.07 sys = 31.52 CPU) @ 17.13/s (n=540)
-         TTX: 31 wallclock secs (31.46 usr +  0.07 sys = 31.53 CPU) @ 18.01/s (n=568)
-      TTXCET: 31 wallclock secs (31.47 usr +  0.00 sys = 31.47 CPU) @ 32.60/s (n=1026)
-  TextTemplate: 32 wallclock secs (31.63 usr +  0.00 sys = 31.63 CPU) @ 58.93/s (n=1864)
-                Rate    HTC    HTE     TT    TTX TTXCET    TS    HT TextTemplate TA_NOCACHE TA_H_NOCACHE    TA  TA_H TMPL   HTP
-  HTC          11.5/s     --   -13%   -33%   -36%   -65%  -69%  -78%         -80%       -82%         -86%  -93%  -94% -99% -100%
-  HTE          13.2/s    14%     --   -23%   -27%   -60%  -64%  -74%         -78%       -79%         -83%  -92%  -93% -99% -100%
-  TT           17.1/s    49%    30%     --    -5%   -47%  -54%  -67%         -71%       -73%         -79%  -89%  -91% -99%  -99%
-  TTX          18.0/s    56%    37%     5%     --   -45%  -51%  -65%         -69%       -71%         -77%  -88%  -91% -99%  -99%
-  TTXCET       32.6/s   183%   148%    90%    81%     --  -12%  -36%         -45%       -48%         -59%  -79%  -84% -97%  -99%
-  TS           37.0/s   221%   181%   116%   105%    13%    --  -28%         -37%       -41%         -54%  -76%  -81% -97%  -99%
-  HT           51.3/s   346%   290%   199%   185%    57%   39%    --         -13%       -19%         -36%  -67%  -74% -96%  -98%
-  TextTemplate 58.9/s   412%   348%   244%   227%    81%   59%   15%           --        -7%         -26%  -62%  -70% -95%  -98%
-  TA_NOCACHE   63.1/s   448%   380%   269%   251%    94%   71%   23%           7%         --         -21%  -59%  -68% -95%  -98%
-  TA_H_NOCACHE 79.7/s   592%   505%   365%   343%   145%  115%   55%          35%        26%           --  -49%  -60% -94%  -97%
-  TA            155/s  1248%  1079%   806%   762%   376%  320%  203%         163%       146%          95%    --  -22% -88%  -94%
-  TA_H          198/s  1623%  1407%  1058%  1001%   508%  436%  287%         237%       214%         149%   28%    -- -85%  -93%
-  TMPL         1298/s 11172%  9758%  7476%  7105%  3881% 3408% 2430%        2102%      1956%        1528%  736%  554%   --  -52%
-  HTP          2719/s 23516% 20554% 15773% 14995%  8241% 7249% 5201%        4514%      4207%        3311% 1652% 1271% 110%    --
-  ---FILE-----------------------------------------------------------------
-  Compiled and cached on the file system tests
-  Benchmark: running HT, HTC, TA, TA_H, TA_P, TA_S, TMPL, TS_CF, TS_CHI, TS_CHIMM, TS_CMM, TT, TTX for at least 30 CPU seconds...
-          HT: 32 wallclock secs (31.49 usr +  0.13 sys = 31.62 CPU) @ 87.67/s (n=2772)
-         HTC: 33 wallclock secs (31.91 usr +  0.25 sys = 32.16 CPU) @ 94.34/s (n=3034)
-          TA: 32 wallclock secs (31.26 usr +  0.19 sys = 31.45 CPU) @ 127.92/s (n=4023)
-        TA_H: 32 wallclock secs (31.27 usr +  0.22 sys = 31.49 CPU) @ 159.54/s (n=5024)
-        TA_P: 31 wallclock secs (31.30 usr +  0.19 sys = 31.49 CPU) @ 67.96/s (n=2140)
-        TA_S: 31 wallclock secs (31.26 usr +  0.17 sys = 31.43 CPU) @ 128.79/s (n=4048)
-        TMPL: 32 wallclock secs (30.89 usr +  0.71 sys = 31.60 CPU) @ 1248.20/s (n=39443)
-       TS_CF: 32 wallclock secs (31.08 usr +  0.47 sys = 31.55 CPU) @ 179.65/s (n=5668)
-      TS_CHI: 32 wallclock secs (31.21 usr +  0.43 sys = 31.64 CPU) @ 184.45/s (n=5836)
-    TS_CHIMM: 32 wallclock secs (31.45 usr +  0.14 sys = 31.59 CPU) @ 187.50/s (n=5923)
-      TS_CMM: 31 wallclock secs (31.44 usr +  0.10 sys = 31.54 CPU) @ 198.80/s (n=6270)
-          TT: 31 wallclock secs (31.41 usr +  0.19 sys = 31.60 CPU) @ 53.83/s (n=1701)
-         TTX: 32 wallclock secs (31.36 usr +  0.25 sys = 31.61 CPU) @ 63.68/s (n=2013)
-             Rate    TT   TTX  TA_P    HT   HTC   TA TA_S TA_H TS_CF TS_CHI TS_CHIMM TS_CMM TMPL
-  TT       53.8/s    --  -15%  -21%  -39%  -43% -58% -58% -66%  -70%   -71%     -71%   -73% -96%
-  TTX      63.7/s   18%    --   -6%  -27%  -32% -50% -51% -60%  -65%   -65%     -66%   -68% -95%
-  TA_P     68.0/s   26%    7%    --  -22%  -28% -47% -47% -57%  -62%   -63%     -64%   -66% -95%
-  HT       87.7/s   63%   38%   29%    --   -7% -31% -32% -45%  -51%   -52%     -53%   -56% -93%
-  HTC      94.3/s   75%   48%   39%    8%    -- -26% -27% -41%  -47%   -49%     -50%   -53% -92%
-  TA        128/s  138%  101%   88%   46%   36%   --  -1% -20%  -29%   -31%     -32%   -36% -90%
-  TA_S      129/s  139%  102%   90%   47%   37%   1%   -- -19%  -28%   -30%     -31%   -35% -90%
-  TA_H      160/s  196%  151%  135%   82%   69%  25%  24%   --  -11%   -14%     -15%   -20% -87%
-  TS_CF     180/s  234%  182%  164%  105%   90%  40%  39%  13%    --    -3%      -4%   -10% -86%
-  TS_CHI    184/s  243%  190%  171%  110%   96%  44%  43%  16%    3%     --      -2%    -7% -85%
-  TS_CHIMM  187/s  248%  194%  176%  114%   99%  47%  46%  18%    4%     2%       --    -6% -85%
-  TS_CMM    199/s  269%  212%  193%  127%  111%  55%  54%  25%   11%     8%       6%     -- -84%
-  TMPL     1248/s 2219% 1860% 1737% 1324% 1223% 876% 869% 682%  595%   577%     566%   528%   --
-  ---MEM------------------------------------------------------------------
-  Cached in memory tests
-  Benchmark: running HT, HTC, HTE, HTJ, HTP, TA, TA_H, TA_P, TA_PS, TS_CF, TS_CHI, TT, TTX for at least 30 CPU seconds...
-          HT: 32 wallclock secs (31.43 usr +  0.05 sys = 31.48 CPU) @ 96.09/s (n=3025)
-         HTC: 32 wallclock secs (31.41 usr +  0.01 sys = 31.42 CPU) @ 1821.64/s (n=57236)
-         HTE: 31 wallclock secs (31.36 usr +  0.01 sys = 31.37 CPU) @ 15.21/s (n=477)
-         HTJ: 31 wallclock secs (30.69 usr +  0.79 sys = 31.48 CPU) @ 3624.62/s (n=114103)
-         HTP: 31 wallclock secs (28.95 usr +  2.21 sys = 31.16 CPU) @ 2612.48/s (n=81405)
-          TA: 32 wallclock secs (31.55 usr +  0.01 sys = 31.56 CPU) @ 156.37/s (n=4935)
-        TA_H: 31 wallclock secs (31.53 usr +  0.03 sys = 31.56 CPU) @ 198.67/s (n=6270)
-        TA_P: 31 wallclock secs (31.24 usr +  0.03 sys = 31.27 CPU) @ 185.19/s (n=5791)
-       TA_PS: 31 wallclock secs (31.34 usr +  0.04 sys = 31.38 CPU) @ 186.87/s (n=5864)
-       TS_CF: 31 wallclock secs (31.53 usr +  0.02 sys = 31.55 CPU) @ 280.51/s (n=8850)
-      TS_CHI: 32 wallclock secs (31.69 usr +  0.04 sys = 31.73 CPU) @ 204.00/s (n=6473)
-          TT: 31 wallclock secs (31.52 usr +  0.00 sys = 31.52 CPU) @ 148.64/s (n=4685)
-         TTX: 31 wallclock secs (31.58 usr +  0.01 sys = 31.59 CPU) @ 256.60/s (n=8106)
-           Rate    HTE    HT    TT    TA  TA_P TA_PS  TA_H TS_CHI   TTX TS_CF  HTC  HTP   HTJ
-  HTE    15.2/s     --  -84%  -90%  -90%  -92%  -92%  -92%   -93%  -94%  -95% -99% -99% -100%
-  HT     96.1/s   532%    --  -35%  -39%  -48%  -49%  -52%   -53%  -63%  -66% -95% -96%  -97%
-  TT      149/s   878%   55%    --   -5%  -20%  -20%  -25%   -27%  -42%  -47% -92% -94%  -96%
-  TA      156/s   928%   63%    5%    --  -16%  -16%  -21%   -23%  -39%  -44% -91% -94%  -96%
-  TA_P    185/s  1118%   93%   25%   18%    --   -1%   -7%    -9%  -28%  -34% -90% -93%  -95%
-  TA_PS   187/s  1129%   94%   26%   20%    1%    --   -6%    -8%  -27%  -33% -90% -93%  -95%
-  TA_H    199/s  1207%  107%   34%   27%    7%    6%    --    -3%  -23%  -29% -89% -92%  -95%
-  TS_CHI  204/s  1242%  112%   37%   30%   10%    9%    3%     --  -20%  -27% -89% -92%  -94%
-  TTX     257/s  1588%  167%   73%   64%   39%   37%   29%    26%    --   -9% -86% -90%  -93%
-  TS_CF   281/s  1745%  192%   89%   79%   51%   50%   41%    38%    9%    -- -85% -89%  -92%
-  HTC    1822/s 11880% 1796% 1126% 1065%  884%  875%  817%   793%  610%  549%   -- -30%  -50%
-  HTP    2612/s 17081% 2619% 1658% 1571% 1311% 1298% 1215%  1181%  918%  831%  43%   --  -28%
-  HTJ    3625/s 23737% 3672% 2339% 2218% 1857% 1840% 1724%  1677% 1313% 1192%  99%  39%    --
+  Output of benchmark_template_engines --progress \
+    --norecords_loop_template --novariable_if_template \
+    --novariable_if_else_template
+  --- Starting Benchmarks --------------------------------------------------------
+  ETA: 56 benchmarks to run = 560 seconds minimum.
+  progress: 100% [============================================================ ]D 0h11m28s
+  --- Template Benchmark @Tue Feb 16 18:26:27 2010 -------------------------------
+  HT         - HTML::Template (2.9)
+  HTC        - HTML::Template::Compiled (0.94)
+  HTE        - HTML::Template::Expr (0.07)
+  HTJ        - HTML::Template::JIT (0.05)
+  HTP        - HTML::Template::Pro (0.93)
+  MoTe       - Mojo::Template (0.999914)
+  TAHT       - Template::Alloy (1.013) in HTML::Template mode
+  TATT       - Template::Alloy (1.013) in Template::Toolkit mode
+  TATT_P     - Template::Alloy (1.013) in Template::Toolkit mode (compile to
+               perl)
+  TATT_PS    - Template::Alloy (1.013) in Template::Toolkit mode (compile to
+               perl, using process_simple())
+  TATT_S     - Template::Alloy (1.013) in Template::Toolkit mode (using
+               process_simple())
+  TS         - Template::Sandbox (1.02) without caching
+  TS_CF      - Template::Sandbox (1.02) with Cache::CacheFactory (1.10) caching
+  TS_CHI     - Template::Sandbox (1.02) with CHI (0.33) caching
+  TS_FMM     - Template::Sandbox (1.02) with Cache::FastMmap (1.34) caching
+  TT         - Template::Toolkit (2.22)
+  TT_X       - Template::Toolkit (2.22) with Stash::XS (no version number)
+  TT_XCET    - Template::Toolkit (2.22) with Stash::XS (no version number) and
+               Template::Parser::CET (0.05)
+  TeMMHM     - Text::MicroMason (2.07) using Text::MicroMason::HTMLMason (no
+               version number)
+  TeMMTeTe   - Text::MicroMason (2.07) using Text::MicroMason::HTMLMason (no
+               version number)
+  TeMT       - Text::MicroTemplate (0.11)
+  TeTe       - Text::Template (1.45)
+  TeTmpl     - Text::Tmpl (0.33)
+  --- uncached_string ------------------------------------------------------------
+             Rate TeMMTeTe    HTC     TT   TT_X    HTE  TATT TT_XCET    TS  TeMT  MoTe  TAHT    HT TeMMHM  TeTe TeTmpl   HTP
+  TeMMTeTe 1.84/s       --   -78%   -80%   -84%   -86%  -92%    -92%  -94%  -94%  -94%  -95%  -96%   -97%  -97%  -100% -100%
+  HTC      8.44/s     359%     --   -11%   -25%   -36%  -61%    -62%  -70%  -73%  -73%  -77%  -82%   -85%  -87%   -99% -100%
+  TT       9.44/s     413%    12%     --   -16%   -29%  -57%    -57%  -67%  -69%  -70%  -74%  -80%   -83%  -86%   -98% -100%
+  TT_X     11.2/s     510%    33%    19%     --   -15%  -48%    -49%  -60%  -63%  -64%  -69%  -76%   -80%  -83%   -98%  -99%
+  HTE      13.2/s     618%    57%    40%    18%     --  -39%    -40%  -53%  -57%  -57%  -64%  -71%   -76%  -80%   -98%  -99%
+  TATT     21.7/s    1081%   157%   130%    93%    64%    --     -1%  -23%  -29%  -30%  -41%  -53%   -61%  -67%   -96%  -99%
+  TT_XCET  22.0/s    1096%   161%   133%    96%    67%    1%      --  -22%  -28%  -29%  -40%  -52%   -60%  -67%   -96%  -99%
+  TS       28.4/s    1442%   236%   201%   153%   115%   31%     29%    --   -8%   -8%  -23%  -38%   -49%  -57%   -95%  -99%
+  TeMT     30.8/s    1570%   264%   226%   174%   133%   41%     40%    8%    --   -1%  -16%  -33%   -44%  -54%   -95%  -99%
+  MoTe     31.0/s    1584%   267%   228%   176%   134%   43%     41%    9%    1%    --  -16%  -33%   -44%  -53%   -95%  -98%
+  TAHT     36.7/s    1894%   335%   289%   227%   178%   69%     67%   29%   19%   18%    --  -20%   -33%  -45%   -94%  -98%
+  HT       46.1/s    2406%   447%   389%   311%   249%  112%    110%   63%   50%   49%   26%    --   -16%  -30%   -93%  -98%
+  TeMMHM   55.2/s    2896%   553%   484%   391%   317%  154%    151%   94%   79%   78%   50%   20%     --  -17%   -91%  -97%
+  TeTe     66.3/s    3500%   685%   602%   490%   401%  205%    201%  134%  115%  114%   80%   44%    20%    --   -89%  -97%
+  TeTmpl    617/s   33420%  7209%  6439%  5391%  4568% 2739%   2704% 2074% 1907% 1891% 1581% 1237%  1019%  831%     --  -70%
+  HTP      2065/s  112084% 24364% 21785% 18277% 15523% 9401%   9283% 7177% 6616% 6564% 5525% 4376%  3645% 3017%   235%    --
+  --- disk_cache -----------------------------------------------------------------
+            Rate TATT_P TATT_PS    TT  MoTe  TATT TATT_S  TeMT   HTC TT_XCET  TT_X  TAHT    HT TS_CF TS_CHI TeTmpl  HTP
+  TATT_P  23.8/s     --     -0%  -10%  -13%  -23%   -23%  -41%  -45%    -50%  -51%  -58%  -62%  -80%   -80%   -96% -99%
+  TATT_PS 23.9/s     0%      --  -10%  -13%  -22%   -22%  -41%  -45%    -50%  -50%  -58%  -62%  -80%   -80%   -96% -99%
+  TT      26.5/s    11%     11%    --   -3%  -14%   -14%  -35%  -39%    -45%  -45%  -54%  -58%  -77%   -78%   -96% -99%
+  MoTe    27.3/s    15%     14%    3%    --  -11%   -11%  -33%  -37%    -43%  -43%  -52%  -57%  -77%   -77%   -95% -99%
+  TATT    30.7/s    29%     29%   16%   12%    --    -0%  -24%  -29%    -36%  -36%  -46%  -52%  -74%   -74%   -95% -99%
+  TATT_S  30.8/s    29%     29%   16%   13%    0%     --  -24%  -29%    -36%  -36%  -46%  -51%  -74%   -74%   -95% -99%
+  TeMT    40.7/s    71%     70%   54%   49%   32%    32%    --   -7%    -15%  -16%  -29%  -36%  -65%   -66%   -93% -98%
+  HTC     43.6/s    83%     83%   65%   60%   42%    42%    7%    --     -9%  -10%  -24%  -31%  -63%   -63%   -93% -98%
+  TT_XCET 48.0/s   101%    101%   81%   76%   56%    56%   18%   10%      --   -0%  -16%  -24%  -59%   -59%   -92% -98%
+  TT_X    48.2/s   102%    102%   82%   76%   57%    56%   18%   11%      0%    --  -16%  -24%  -59%   -59%   -92% -98%
+  TAHT    57.3/s   141%    140%  117%  110%   87%    86%   41%   32%     20%   19%    --  -10%  -51%   -51%   -90% -97%
+  HT      63.4/s   166%    166%  140%  132%  106%   106%   56%   46%     32%   32%   11%    --  -46%   -46%   -89% -97%
+  TS_CF    117/s   391%    389%  341%  327%  280%   279%  187%  168%    144%  143%  104%   84%    --    -1%   -80% -94%
+  TS_CHI   118/s   396%    395%  346%  332%  284%   283%  190%  171%    146%  145%  106%   86%    1%     --   -80% -94%
+  TeTmpl   597/s  2407%   2400% 2155% 2085% 1842%  1838% 1368% 1270%   1145% 1140%  941%  841%  411%   406%     -- -71%
+  HTP     2065/s  8572%   8547% 7699% 7457% 6619%  6604% 4977% 4638%   4205% 4187% 3501% 3156% 1668%  1649%   246%   --
+  --- shared_memory_cache --------------------------------------------------------
+           Rate TS_CHI TS_FMM    HTP
+  TS_CHI  127/s     --    -2%   -94%
+  TS_FMM  130/s     2%     --   -94%
+  HTP    2070/s  1534%  1498%     --
+  --- memory_cache ---------------------------------------------------------------
+           Rate    HTE   TeMT   TAHT     HT    HTC TS_CHI  TS_CF    HTP    HTJ
+  HTE    15.2/s     --   -64%   -77%   -79%   -87%   -88%   -90%   -99%   -99%
+  TeMT   41.9/s   176%     --   -35%   -43%   -65%   -67%   -73%   -98%   -98%
+  TAHT   64.8/s   327%    55%     --   -12%   -46%   -50%   -59%   -97%   -97%
+  HT     73.3/s   383%    75%    13%     --   -39%   -43%   -53%   -96%   -97%
+  HTC     120/s   691%   186%    85%    64%     --    -7%   -23%   -94%   -95%
+  TS_CHI  129/s   749%   207%    99%    76%     7%     --   -18%   -94%   -95%
+  TS_CF   157/s   933%   274%   142%   114%    31%    22%     --   -92%   -93%
+  HTP    2070/s 13548%  4839%  3094%  2725%  1626%  1507%  1222%     --   -13%
+  HTJ    2392/s 15675%  5609%  3592%  3166%  1895%  1758%  1427%    16%     --
+  --- instance_reuse -------------------------------------------------------------
+             Rate  TATT TATT_S TATT_P TATT_PS    TT  TeTe  TT_X TT_XCET    TS TeMMHM TeMMTeTe MoTe
+  TATT     33.3/s    --    -0%    -3%     -3%  -23%  -79%  -79%    -79%  -80%   -98%     -98% -99%
+  TATT_S   33.3/s    0%     --    -3%     -3%  -22%  -78%  -79%    -79%  -80%   -98%     -98% -99%
+  TATT_P   34.3/s    3%     3%     --     -0%  -20%  -78%  -78%    -79%  -79%   -98%     -98% -99%
+  TATT_PS  34.4/s    4%     3%     0%      --  -20%  -78%  -78%    -78%  -79%   -98%     -98% -99%
+  TT       43.0/s   29%    29%    25%     25%    --  -72%  -73%    -73%  -74%   -98%     -98% -98%
+  TeTe      155/s  365%   364%   351%    349%  260%    --   -3%     -3%   -6%   -92%     -93% -94%
+  TT_X      159/s  377%   376%   362%    361%  270%    3%    --     -1%   -4%   -92%     -93% -94%
+  TT_XCET   160/s  381%   380%   366%    365%  273%    3%    1%      --   -3%   -92%     -93% -94%
+  TS        165/s  395%   394%   380%    378%  284%    6%    4%      3%    --   -92%     -92% -94%
+  TeMMHM   1960/s 5792%  5781%  5608%   5591% 4464% 1167% 1135%   1124% 1090%     --     -10% -28%
+  TeMMTeTe 2183/s 6462%  6450%  6257%   6239% 4983% 1311% 1275%   1264% 1225%    11%       -- -20%
+  MoTe     2729/s 8104%  8088%  7847%   7824% 6254% 1664% 1619%   1605% 1557%    39%      25%   --
 
-As can be seen from the results, L<Template::Sandbox> benefits
-massively from using external caching modules when it comes to
-on-disk caching with only the C<libtmpl>-based L<Text::Tmpl>
-running faster, in fact the gain is so much that the performance
-is more a credit to those caching modules rather than
-L<Template::Sandbox>.  You should also probably ignore the
-FastMmap-based benchmarks since they're not strictly just on-disk
-benchmarks - the figures are included for completeness rather than
-comparision.
+As can be seen from the results, L<Template::Sandbox> ranks
+well when it comes to on-disk caching with only the
+C<libtmpl>-based L<Text::Tmpl> and the compile-to-C
+L<HTML::Template::Pro> running faster.
 
-You can see this when looking at the in-memory caching, where
-the performance gap is much smaller among the mostly-perl template
+You can also see this when looking at the in-memory caching, where
+the performance gap is even larger among the mostly-perl template
 modules, all of whom trail far behind the more exotic compilation
-methodologies of L<HTML::Template::Compiled>, L<HTML::Template::Pro>
-and L<HTML::Template::JIT>.
+methodologies of L<HTML::Template::Pro> and L<HTML::Template::JIT>.
+
+With the instance-reuse caching (similar but not directly comparable
+to in-memory caching), L<Template::Sandbox> still ranks highly, with
+only the "embedded-perl" template engines of L<Text::MicroMason> and
+L<Mojo::Template> performing better (much much better it must be said).
+Of particular note is the performance of TT_XCET, which is
+L<Template::Toolkit> running with the XS version of its stash and
+parser, surpassed by the pure-perl L<Template::Sandbox>.
+Since L<Template::Sandbox> and L<Template::Toolkit> are roughly
+comparable as being heavyweights in terms of features, this makes
+a useful comparison.
 
 When it comes to the string-template benchmarks, you can see the impact
 of being forced to compile the template each time, this is representative
@@ -6081,48 +6154,10 @@ shows a fairly mediocre performance, partly due to its pure-perl
 implementation and partly due to the heavy optimization phase - you can
 see similar costs in all the more heavily-compiled template systems.
 
-For reference the template was generated with the following perl code,
-equivilents being generated for other template markup:
-
-  my $filler = ((" foo" x 10)."\n") x 10;
-  my $middle_repeats     = 30;
-  
-  my $stash_t = {
-    shell_header => "This is a header",
-    shell_footer => "This is a footer",
-    shell_start  => "<html>",
-    shell_end    => "<end>",
-    a_stuff      => [qw(one two three four)],
-  };
-  
-  my $middle_ts = <<"DOC";
-  $filler
-  
-  
-  <: if foo :>
-  This is some text.
-  <: endif :>
-  
-  
-  <: foreach i in a_stuff :><: expr i :><: endfor :>
-  <: expr pass_in_something :>
-  
-  $filler
-  DOC
-  
-  $middle_ts = $middle_ts x $middle_repeats;
-  
-  my $content_ts = <<"DOC";
-  <: expr shell_header :>
-  <: expr shell_start :>
-  $middle_ts
-  <: expr shell_end :>
-  <: expr shell_footer :>
-  DOC
-
-Once the benchmark script has been made a little more user-friendly,
-I aim to bundle it in the distribution samples directory in the same
-manner as L<Template::Alloy>.
+This paints only the broadest picture and is the tip of the iceberg
+when it comes to template benchmarking, if you're interested in
+the numbers, I suggest looking at producing your own reports using
+L<Template::Benchmark>.
 
 =head1 PRIVATE AND SEMI-PRIVATE METHODS
 
@@ -6196,7 +6231,7 @@ template position added.
 
 =head1 QUALITY ASSURANCE AND TEST METRICS
 
-As of version 1.02_01 there are 1245 tests within the distribution, if the
+As of version 1.02_01 there are 1337 tests within the distribution, if the
 this isn't the current version number, I've forgotton to update this section,
 sorry. :)
 
@@ -6205,11 +6240,11 @@ The tests have coverage:
   ---------------------------- ------ ------ ------ ------ ------ ------ ------
   File                           stmt   bran   cond    sub    pod   time  total
   ---------------------------- ------ ------ ------ ------ ------ ------ ------
-  blib/lib/Template/Sandbox.pm   98.8   91.9   86.7  100.0  100.0   99.8   95.6
+  blib/lib/Template/Sandbox.pm   98.9   91.9   89.0  100.0  100.0   99.8   95.8
   ...mplate/Sandbox/Library.pm  100.0  100.0   36.4  100.0  100.0    0.2   93.1
   ...andbox/NumberFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
   ...andbox/StringFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
-  Total                          98.9   92.2   84.4  100.0  100.0  100.0   95.6
+  Total                          98.9   92.1   86.6  100.0  100.0  100.0   95.8
   ---------------------------- ------ ------ ------ ------ ------ ------ ------
 
 You can generate this report within the distribution's directory by:
