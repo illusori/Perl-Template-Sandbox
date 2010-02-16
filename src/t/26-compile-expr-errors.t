@@ -8,7 +8,7 @@ use Test::More;
 use Template::Sandbox;
 use Test::Exception;
 
-plan tests => 1;
+plan tests => 2;
 
 my ( $template, $syntax );
 
@@ -19,3 +19,13 @@ $template = Template::Sandbox->new();
 throws_ok { $template->set_template_string( $syntax ) }
     qr/compile error: Not a well-formed expression: a a at line 1, char 1 of/,
     'malformed expression';
+
+#
+#  2: Malformed bare expression.
+$syntax = '<: a a :>';
+$template = Template::Sandbox->new(
+    allow_bare_expr => 1,
+    );
+throws_ok { $template->set_template_string( $syntax ) }
+    qr/compile error: Not a well-formed expression: a a at line 1, char 1 of/,
+    'malformed bare expression';
