@@ -530,7 +530,7 @@ BEGIN
 {
     use Exporter   ();
 
-    $Template::Sandbox::VERSION     = '1.02';
+    $Template::Sandbox::VERSION     = '1.02_01';
     @Template::Sandbox::ISA         = qw( Exporter );
 
     @Template::Sandbox::EXPORT      = qw();
@@ -727,7 +727,7 @@ sub get_valid_singular_constructor_param
     my ( $self ) = @_;
 
     return( qw/template cache logger template_root
-        ignore_module_dependencies/ );
+        ignore_module_dependencies open_delimiter close_delimiter/ );
 }
 
 sub get_valid_multiple_constructor_param
@@ -776,7 +776,7 @@ sub new
     }
 
     $self->{ phase } = 'initialization';
-    $self->initialize( { %param } );
+    $self->initialize( \%param );
     $self->{ phase } = 'post-initialization';
 
     return( $self );
@@ -829,6 +829,11 @@ sub initialize
     $self->{ ignore_module_dependencies } =
         $param->{ ignore_module_dependencies }
         if exists $param->{ ignore_module_dependencies };
+
+    $self->{ open_delimiter } = $param->{ open_delimiter }
+        if exists $param->{ open_delimiter };
+    $self->{ close_delimiter } = $param->{ close_delimiter }
+        if exists $param->{ close_delimiter };
 
     $self->set_cache( $param->{ cache } )
         if exists $param->{ cache };
@@ -1233,7 +1238,7 @@ sub add_var
     $self->caller_error(
         "Bad argument to add_var, expected top-level variable name, got: $var"
         )
-        if $var =~ /\./;
+        if $var =~ /\./o;
 
     $self->{ vars }->{ $var } = $value;
 }
@@ -1247,7 +1252,7 @@ sub add_vars
         "Bad var(s) in add_vars, expected top-level variable name, got: " .
         join( ', ', @bad_vars )
         )
-        if @bad_vars = grep /\./, keys( %{$vars} );
+        if @bad_vars = grep /\./o, keys( %{$vars} );
 
     foreach my $var ( keys( %{$vars} ) )
     {
@@ -1324,7 +1329,7 @@ sub _escape_string
 {
     my ( $self, $string ) = @_;
 
-    $string =~ s/\'/\\\'/g;
+    $string =~ s/\'/\\\'/go;
     return( $string );
 }
 
@@ -1396,7 +1401,7 @@ sub _replace_defines
     }
     1 while $template_content =~ s/\$\{('?)([A-Z0-9_]+)(?::([^\}]*))?\1\}/
         $self->_define_value( $defines, $2, $3, $1,
-            $top ? pos( $template_content ) : undef )/gex;
+            $top ? pos( $template_content ) : undef )/geox;
     if( $top )
     {
         delete $self->{ seen_defines };
@@ -1552,7 +1557,8 @@ sub _compile_template
     my ( $i, @hunks, @files, @pos_stack, @nest_stack, @compiled, %includes,
          %trim, $trim_next, %file_numbers, @define_stack,
          $local_syntaxes, $local_token_aliases, $local_syntax_regexp,
-         $hunk_regexp );
+         $hunk_regexp,
+         $open_delimiter, $close_delimiter, $open_regexp, $close_regexp );
 
     @files           = ( $self->{ filename } );
     %file_numbers    = ( $self->{ filename } => 0 );
@@ -1574,6 +1580,12 @@ sub _compile_template
     #  Stuff we're going to trim later.
     %trim         = ();
 
+    $open_delimiter  = $self->{ open_delimiter }  || '<:';
+    $close_delimiter = $self->{ close_delimiter } || ':>';
+
+    $open_regexp  = qr/\Q$open_delimiter\E/;
+    $close_regexp = qr/\Q$close_delimiter\E/;
+
     $local_token_aliases = $self->{ local_token_aliases } || {};
     $local_syntaxes      = $self->{ local_syntaxes } || {};
 
@@ -1588,7 +1600,7 @@ sub _compile_template
             values( %{$syntaxes{ '.instr' }} ) ) );
     $local_syntax_regexp = ' | ' . $local_syntax_regexp
         if $local_syntax_regexp;
-    $hunk_regexp = qr/^<: \s*
+    $hunk_regexp = qr/^$open_regexp \s*
         (
           var | expr |
           (?:if|unless) | else? \s* (?:if|unless) | else |
@@ -1598,9 +1610,9 @@ sub _compile_template
           \# |
           debug
           $local_syntax_regexp
-        ) \s+ (.*?) \s* :> (.+)? $/sx;
+        ) \s+ (.*?) \s* $close_regexp (.+)? $/sx;
 
-    @hunks = split( /(?=<:)/so, $self->{ template }, -1 );
+    @hunks = split( /(?=$open_regexp)/s, $self->{ template }, -1 );
     delete $self->{ template };
 
     $self->{ pos_stack } = \@pos_stack;
@@ -1626,19 +1638,18 @@ sub _compile_template
             $rest  = $3;
 
             #  TODO:  still possible?  What triggers it?
-            if( $args =~ /<:/ )
-            {
-                #  error, unclosed token?
-                $self->error( "unexepected <:, possibly unterminated :>" );
-            }
+            #  error, unclosed token?
+            $self->error( "unexepected $open_delimiter, ",
+                "possibly unterminated $close_delimiter" )
+                if $args =~ $open_regexp;
 
             if( defined( $rest ) )
             {
-                $hunk =~ s/:>(?:.*)$/:>/s;
+                $hunk =~ s/$close_regexp(?:.*)$/$close_delimiter/s;
                 splice( @hunks, $i, 1, $hunk, $rest );
             }
 
-            $token =~ s/\s+/ /g;
+            $token =~ s/\s+/ /go;
 
             $token = $local_token_aliases->{ $token }
                 if $local_token_aliases->{ $token };
@@ -1956,7 +1967,13 @@ sub _compile_template
         else
         {
             #  We're a literal unless we're a malformed token
-            $self->error( "unrecognised token ($hunk)" ) if $hunk =~ /^<:/;
+            if( $hunk =~ /^$open_regexp/ )
+            {
+                #  Trim bits after the close token if there is one,
+                #  makes a clearer error message.
+                $hunk =~ s/($close_regexp).*$/$1/;
+                $self->error( "unrecognised token ($hunk)" );
+            }
             if( length( $hunk ) )
             {
                 push @compiled, [ LITERAL, $pos, $hunk ];
@@ -3764,6 +3781,36 @@ This lets you register a custom template syntax to the new template
 instance.
 
 See the section L</"Custom Template Syntaxes"> for more details.
+
+=item B<open_delimiter> => I<$open_delimiter>
+
+=item B<close_delimiter> => I<$close_delimiter>
+
+Optionally set the delimiters that indicate, respectively, the start
+and end of a I<template token>.
+By default the opening delimiter is C<< <: >> and the closing delimiter
+is C<< :> >>.
+
+For example, to make L<Template::Toolkit> people feel a bit more at
+home (or to confuse them even more by the different syntax):
+
+  $template = Template::Sandbox->new(
+      open_delimiter  => '[%',
+      close_delimiter => '%]',
+      );
+  $template->add_var( list => [ 1, 2, 4, 5, ] );
+  $template->set_template_string( <<'END_OF_TEMPLATE' );
+  [% FOREACH v IN list %]
+  [% EXPR v %]
+  [% ENDFOR %]
+  END_OF_TEMPLATE
+  print ${$template->run()};
+
+  #  Output:
+  1
+  2
+  4
+  5
 
 =back
 
@@ -6149,7 +6196,7 @@ template position added.
 
 =head1 QUALITY ASSURANCE AND TEST METRICS
 
-As of version 1.02 there are 1117 tests within the distribution, if the
+As of version 1.02_01 there are 1245 tests within the distribution, if the
 this isn't the current version number, I've forgotton to update this section,
 sorry. :)
 
@@ -6158,11 +6205,11 @@ The tests have coverage:
   ---------------------------- ------ ------ ------ ------ ------ ------ ------
   File                           stmt   bran   cond    sub    pod   time  total
   ---------------------------- ------ ------ ------ ------ ------ ------ ------
-  blib/lib/Template/Sandbox.pm   98.7   91.9   86.5  100.0  100.0   99.7   95.5
+  blib/lib/Template/Sandbox.pm   98.8   91.9   86.7  100.0  100.0   99.8   95.6
   ...mplate/Sandbox/Library.pm  100.0  100.0   36.4  100.0  100.0    0.2   93.1
   ...andbox/NumberFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
   ...andbox/StringFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
-  Total                          98.8   92.2   84.1  100.0  100.0  100.0   95.5
+  Total                          98.9   92.2   84.4  100.0  100.0  100.0   95.6
   ---------------------------- ------ ------ ------ ------ ------ ------ ------
 
 You can generate this report within the distribution's directory by:
