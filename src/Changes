@@ -1,5 +1,16 @@
 Revision history for Template::Sandbox
 
+1.02_01 Version released at 2010-02-16-18:57.  *** Development version. ***
+        Version started at  2010-02-16-12:10.
+        Added open_delimiter and close_delimiter options.
+        Added allow_bare_expr option.
+        Added template_toolkit_compat option.
+        Added <: end :> synonym for <: endif :> or <: endfor :>.
+        Made token parsing case-insensitive.
+        Made "unrecognised token" error message slightly clearer.
+        Updated performance documentation with Template::Benchmark results.
+        Performance impact: ~2% lost on compile phase, runtime unaffected.
+
 1.02    Version released at 2010-02-09-09:39.
         Version started at  2010-02-09-09:33.
         Released rc 1.01_11 as 1.02 stable.
