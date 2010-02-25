@@ -269,6 +269,8 @@ my %symbolic_literals = (
     'cr'    => [ LITERAL, 'cr', "\n" ],
     );
 
+#  "our" declarations are to work around problem in some perls where
+#  "my" scope variables aren't seen by (??{ ... }).
 our ( $single_quoted_text_regexp );
 
 $single_quoted_text_regexp = qr/
@@ -333,76 +335,115 @@ $matching_round_brackets_regexp = qr/
     \)
     /sxo;
 
-my $variable_segment_regexp = qr/
-    #  avariable or a_varable or avariable[ expr ]
+my $bare_identifier_regexp = qr/
     [a-zA-Z_][a-zA-Z0-9_]*
-    (?: $matching_square_brackets_regexp )?
-    /sx;
-my $capture_variable_segment_regexp = qr/
-    ^
-    ([a-zA-Z_][a-zA-Z0-9_]*)
-    ($matching_square_brackets_regexp)?
-    $
     /sxo;
-
-my $variable_regexp = qr/
-    #  variablesegment.variablesegment.variablesegment etc.
-    $variable_segment_regexp
-    (?:
-        \.
-        $variable_segment_regexp
-    )*
-    /sxo;
-my $capture_variable_regexp = qr/
-    ^
-    #  variablesegment.variablesegment.variablesegment etc.
-    ($variable_segment_regexp)
-    #  we don't care at this point what the rest of the crud is.
-    (.*)
-    $
-    /sxo;
-#my $capture_variable_regexp = qr/
-#    ^
-#    #  variablesegment.variablesegment.variablesegment etc.
-#    ($variable_segment_regexp)
-#    ((?:
-#        \.
-#        $variable_segment_regexp
-#    )*)
-#    $
-#    /sxo;
 
 my $function_regexp = qr/
     #  abc( expr )
-    [a-zA-Z_]+
+    $bare_identifier_regexp
     $matching_round_brackets_regexp
     /sxo;
 
 my $capture_function_regexp = qr/
     ^
     #  abc( expr )
-    ([a-zA-Z_]+)
-    ($matching_round_brackets_regexp)
+    ($bare_identifier_regexp)
+    \(
+    \s*
+    (.*?)
+    \s*
+    \)
     $
     /sxo;
 
-my $method_regexp = qr/
-    #  variable.method( expr )
-    #  variable->method( expr )
-    $variable_regexp
-    (?: \-\> | \. )
-    $function_regexp
+#  Chained structure:
+#  var.sub.sub
+#  var.sub['sub']
+#  var['sub'].sub
+#  var['sub']['sub'] fails!
+#  var.sub.method()
+#  var['sub'].method()
+#  var.method().sub
+#  var.method()['sub']
+#  func().sub.sub ?
+#  func().method().sub
+
+my $subscript_operator_regexp = qr/
+    (?: \. | \-\> )
     /sxo;
 
-my $capture_method_regexp = qr/
+my $expr_subscript_regexp    = $matching_square_brackets_regexp;
+my $capture_expr_subscript_regexp = qr/
     ^
-    #  variable.method( expr )
-    #  variable->method( expr )
-    ($variable_regexp)
-    (?: \-\> | \. )
+    \[
+    \s*
+    (.*?)
+    \s*
+    \]
+    $
+    /sxo;
+my $literal_subscript_regexp = qr/
+    $subscript_operator_regexp
+    $bare_identifier_regexp
+    /sxo;
+my $capture_literal_subscript_regexp = qr/
+    ^
+    $subscript_operator_regexp
+    ($bare_identifier_regexp)
+    $
+    /sxo;
+my $method_subscript_regexp  = qr/
+    $subscript_operator_regexp
+    $function_regexp
+    /sxo;
+my $capture_method_subscript_regexp = qr/
+    ^
+    #  . | ->
+    $subscript_operator_regexp
     #  abc( expr )
-    ([a-zA-Z_]+)
-    ($matching_round_brackets_regexp)
+    ($bare_identifier_regexp)
+    \(
+    \s*
+    (.*?)
+    \s*
+    \)
+#    ($matching_round_brackets_regexp)
+    $
+    /sxo;
+
+my $chained_operation_top_regexp = qr/
+    (?:
+    #  Function goes first to take matching precedence over bareword
+    $function_regexp |
+    $bare_identifier_regexp
+    )
+    /sxo;
+my $chained_operation_subscript_regexp = qr/
+    (?:
+    $expr_subscript_regexp |
+    #  Method goes first to take matching precedence over bareword
+    $method_subscript_regexp |
+    $literal_subscript_regexp
+    )
+    /sxo;
+my $chained_operation_regexp = qr/
+    $chained_operation_top_regexp
+    (?: $chained_operation_subscript_regexp )*
+    /sxo;
+
+my $capture_chained_operation_top_regexp = qr/
+    ^
+    ($chained_operation_top_regexp)
+    #  we don't care at this point what the rest of the crud is.
+    (.*)
+    $
+    /sxo;
+my $capture_chained_operation_subscript_regexp = qr/
+    ^
+    ($chained_operation_subscript_regexp)
+    #  we don't care at this point what the rest of the crud is.
+    (.*)
     $
     /sxo;
 
@@ -416,6 +457,13 @@ my $literal_number_regexp = qr/
 my $unary_operator_regexp = qr/
     (?: \! | not (?=\s) | - )
     /sxo;
+my $capture_unary_operator_regexp = qr/
+    ^
+    ( \! | not (?=\s) | - )
+    \s*
+    (.*)
+    $
+    /sxo;
 
 my $atomic_expr_regexp = qr/
     #  Optionally a unary operator
@@ -425,14 +473,8 @@ my $atomic_expr_regexp = qr/
         #  A bracketed sub-expression.
         $matching_round_brackets_regexp
         |
-        #  A variable
-        $variable_regexp
-        |
-        #  A function
-        $function_regexp
-        |
-        #  A method
-        $method_regexp
+        #  A chained operation.
+        $chained_operation_regexp
         |
         #  A literal number
         $literal_number_regexp
@@ -477,7 +519,6 @@ my $expr_regexp = qr/
 #                \:
 #                $atomic_expr_regexp
 #            )
-my $anchored_expr_regexp = qr/^$expr_regexp$/o;
 
 my $capture_expr_op_remain_regexp = qr/
     ^
@@ -489,17 +530,6 @@ my $capture_expr_op_remain_regexp = qr/
     (.*)
     $
     /sxo;
-#my $capture_expr_op_remain_regexp = qr/
-#    ^
-#    \s*
-#    ($atomic_expr_regexp)
-#    \s+
-#    ($operator_regexp)
-#    \s+
-#    (.*?)
-#    \s*
-#    $
-#    /sxo;
 
 #my $capture_expr_if_else_remain_regexp = qr/
 #    ^
@@ -530,7 +560,7 @@ BEGIN
 {
     use Exporter   ();
 
-    $Template::Sandbox::VERSION     = '1.02_01';
+    $Template::Sandbox::VERSION     = '1.02_02';
     @Template::Sandbox::ISA         = qw( Exporter );
 
     @Template::Sandbox::EXPORT      = qw();
@@ -728,7 +758,7 @@ sub get_valid_singular_constructor_param
 
     return( qw/template cache logger template_root allow_bare_expr
         ignore_module_dependencies open_delimiter close_delimiter
-        template_toolkit_compat/ );
+        vmethods template_toolkit_compat/ );
 }
 
 sub get_valid_multiple_constructor_param
@@ -839,6 +869,8 @@ sub initialize
             unless exists $param->{ close_delimiter };
         $self->{ allow_bare_expr } = 1
             unless exists $param->{ allow_bare_expr };
+        $self->{ vmethods }        = 1
+            unless exists $param->{ vmethods };
     }
 
     $self->{ open_delimiter } = $param->{ open_delimiter }
@@ -847,6 +879,8 @@ sub initialize
         if exists $param->{ close_delimiter };
     $self->{ allow_bare_expr } = $param->{ allow_bare_expr }
         if exists $param->{ allow_bare_expr };
+    $self->{ vmethods } = $param->{ vmethods }
+        if exists $param->{ vmethods };
 
     $self->set_cache( $param->{ cache } )
         if exists $param->{ cache };
@@ -2495,11 +2529,8 @@ sub _compile_expression
     $expression =~ s/^\s+//;
     $expression =~ s/\s+$//;
 
-#$self->error( "expression = '$expression', expr_regexp = $expr_regexp" )
-#  unless $expression =~ $anchored_expr_regexp;
-
     $self->error( "Not a well-formed expression: $expression" )
-        unless $expression =~ $anchored_expr_regexp;
+        unless $expression =~ /^$expr_regexp$/so;
 
     while( $expression =~ $capture_expr_op_remain_regexp )
     {
@@ -2516,13 +2547,9 @@ sub _compile_expression
     #  Not a compound statement, must be atomic.
 
     #  Is it a unary op?
-    if( $expression =~ /^($unary_operator_regexp)\s*(.*)$/o )
+    if( my ( $op, $subexpr ) =
+            $expression =~ $capture_unary_operator_regexp )
     {
-        my ( $op, $subexpr );
-
-        $op      = $1;
-        $subexpr = $2;
-
         $subexpr = $self->_compile_expression( $subexpr );
 
         #  Fold constant values.
@@ -2534,15 +2561,18 @@ sub _compile_expression
     }
 
     #  Is it a bracketed expression?
-    return( $self->_compile_expression( substr( $expression, 1, -1 ) ) )
-        if $expression =~ /^$matching_round_brackets_regexp$/o;
+    #  TODO: Do I care at this point if it's matching?
+#    return( $self->_compile_expression( substr( $expression, 1, -1 ) ) )
+#        if $expression =~ /^$matching_round_brackets_regexp$/so;
+    return( $self->_compile_expression( $1 ) )
+        if $expression =~ /^\((.*)\)$/so;
 
     #  A literal number
     return( [ LITERAL, $expression, $expression, 0 ] )
-        if $expression =~ /^$literal_number_regexp$/o;
+        if $expression =~ /^$literal_number_regexp$/so;
 
     #  A literal string
-    if( $expression =~ /^$single_quoted_text_regexp$/o )
+    if( $expression =~ /^$single_quoted_text_regexp$/so )
     {
         my ( $string );
 
@@ -2552,81 +2582,9 @@ sub _compile_expression
         return( [ LITERAL, $expression, $string, 0 ] );
     }
 
-    #  A variable
-    return( $self->_compile_var( $expression ) )
-        if $expression =~ /^$variable_regexp$/o;
-
-    #  A function
-    if( $expression =~ $capture_function_regexp )
-    {
-        my ( $func, $args, $numargs, $func_def );
-
-        $func = $1;
-        $args = length( $2 ) > 2 ? substr( $2, 1, -2 ) : '';
-
-        $func_def = $functions{ $func } if $functions{ $func };
-        $func_def = $self->{ local_functions }->{ $func }
-            if $self->{ local_functions } and
-               $self->{ local_functions }->{ $func };
-
-        $self->error( "Unknown function: $func" ) unless $func_def;
-
-        $args = $self->_compile_func_args( $args );
-
-        #  Check the number of args.
-        if( ( $numargs = $func_def->[ FUNC_ARG_NUM ] ) >= 0 )
-        {
-            $self->error( "too few args to $func(), expected $numargs " .
-                "and got " . ( $#{$args} + 1 ) . " in $expression" )
-                if $#{$args} + 1 < $numargs;
-            $self->error( "too many args to $func(), expected $numargs " .
-                "and got " . ( $#{$args} + 1 ) . " in $expression" )
-                if $#{$args} + 1 > $numargs;
-        }
-
-        unless( $func_def->[ FUNC_INCONST ] )
-        {
-            my ( $nonliteral );
-
-            foreach my $arg ( @{$args} )
-            {
-                next if $arg->[ 0 ] == LITERAL;
-                $nonliteral = 1;
-                last;
-            }
-
-#CORE::warn( "$expression has " . ( $nonliteral ? "nonliteral" : "literal" ) . " args" );
-            unless( $nonliteral )
-            {
-                my ( $ret );
-
-                $ret = $self->_eval_function( $func, $args );
-
-                return( [ LITERAL, $expression,
-                    ( ( ref( $ret ) eq 'SCALAR' ) ? ${$ret} : $ret ), 1 ] );
-            }
-        }
-
-        unshift @{$args}, [ TEMPLATE ]
-            if $func_def->[ FUNC_NEEDS_TEMPLATE ];
-
-        return( [ FUNC, $expression, $func, $args ] );
-    }
-
-    #  A method
-    if( $expression =~ $capture_method_regexp )
-    {
-        my ( $var, $method, $args );
-
-        $var    = $1;
-        $method = $2;
-        $args   = length( $3 ) > 2 ? substr( $3, 1, -2 ) : '';
-
-        $var  = $self->_compile_var( $var );
-        $args = $self->_compile_func_args( $args );
-
-        return( [ METHOD, $expression, $var, $method, $args ] );
-    }
+    #  A variable or chained construct (including functions)
+    return( $self->_compile_chained_operation( $expression ) )
+        if $expression =~ /^$chained_operation_regexp$/so;
 
     #  "cannot happen".
     $self->error( "Unrecognised atomic expression element: $expression" );
@@ -2643,20 +2601,20 @@ sub _build_op_tree
 
 #print "build_op_tree( ", Data::Dumper::Dumper( $arr ), "\n";
 
-    $self->error( "Empty expression" ) if $#{$arr} < 0;
+    $self->error( "Empty expression" ) unless @{$arr};
 
-    for( my $i = 0; $i <= $#{$arr}; $i += 2 )
+    for( my $i = 0; $i < @{$arr}; $i += 2 )
     {
         #  TODO: this is a crappy hack to provide compat with recursion.
         next if ref( $arr->[ $i ] );
         $arr->[ $i ] = $self->_compile_expression( $arr->[ $i ] );
     }
 
-    return( $arr->[ 0 ] ) if $#{$arr} == 0;
+    return( $arr->[ 0 ] ) if @{$arr} == 1;
 
     #  Look for literals to fold together.
 #print "Looking at: ", Data::Dumper::Dumper( $arr ), "\n";
-    for( my $i = 1; $i < $#{$arr}; $i += 2 )
+    for( my $i = 1; $i < @{$arr} - 1; $i += 2 )
     {
         my ( $op, $weight );
 
@@ -2672,7 +2630,7 @@ sub _build_op_tree
         #  eligible for folding.
         if( ( ( $i < 3 ) or
               ( $weight <= $operators{ $arr->[ $i - 2 ] }->[ 0 ] ) ) and
-            ( ( $i >= $#{$arr} - 1 ) or
+            ( ( $i >= @{$arr} - 2 ) or
               ( $weight <= $operators{ $arr->[ $i + 2 ] }->[ 0 ] ) ) and
             ( $lhs->[ 0 ] == LITERAL ) and ( $rhs->[ 0 ] == LITERAL ) )
         {
@@ -2691,10 +2649,10 @@ sub _build_op_tree
         }
     }
 
-    return( $arr->[ 0 ] ) if $#{$arr} == 0;
+    return( $arr->[ 0 ] ) if @{$arr} == 1;
 
     $highest_weight = 0;
-    for( my $i = 1; $i < $#{$arr}; $i += 2 )
+    for( my $i = 1; $i < @{$arr} - 1; $i += 2 )
     {
         my ( $op );
 
@@ -2710,40 +2668,103 @@ sub _build_op_tree
 
     $op  = $arr->[ $highest_pos ];
     $lhs = $self->_build_op_tree( [ @{$arr}[ 0..$highest_pos - 1 ] ] );
-    $rhs = $self->_build_op_tree( [ @{$arr}[ $highest_pos + 1..$#{$arr} ] ] );
+    $rhs = $self->_build_op_tree( [ @{$arr}[ $highest_pos + 1..( @{$arr} - 1 ) ] ] );
 
     return( [ OP_TREE, '', $op, $lhs, $rhs ] );
 }
 
-sub _compile_var
+sub _build_var
 {
-    my ( $self, $var ) = @_;
-    my ( $original, @segments, @originals, $segment );
+    my ( $self, $segments, $originals, $original ) = @_;
+    my @segments  = @{$segments};
+    my @originals = @{$originals};
 
-#print "compile_var( $var )\n";
+    #  If we're just a subexpression with no subscripts, just return
+    #  the subexpression.
+    return( $segments[ 0 ] )
+        if $#segments == 0 and ref( $segments[ 0 ] );
 
-    return( $symbolic_literals{ $var } )
-        if exists( $symbolic_literals{ $var } );
+    if( $segments[ $#segments ] eq '__size__' )
+    {
+        pop @segments;
+        pop @originals;
+        return( [ FUNC, $original, 'size',
+            [ $self->_build_var( \@segments, \@originals, $original ) ],
+            ] );
+    }
 
-    $original = $var;
+    return( [ VAR, $original, \@segments, \@originals, $#segments ] );
+}
+
+sub _compile_chained_operation
+{
+    my ( $self, $chain ) = @_;
+    my ( $original, $original_so_far, @segments, @originals, $segment,
+         $subscript );
+
+#print "compile_chained_operation( $chain )\n";
+
+    return( $symbolic_literals{ $chain } )
+        if exists( $symbolic_literals{ $chain } );
+
+
+    $original = $chain;
 
     @segments = @originals = ();
-    while( $var and ( $var =~ $capture_variable_regexp ) )
+    if( ( $segment, $chain ) =
+            $chain =~ $capture_chained_operation_top_regexp )
     {
-        $segment = $1;
-        $var     = $2 ? substr( $2, 1 ) : '';
-#print "Segment: $segment\nRest: $var\n";
+#        $segment = $1;
+#        $chain   = $2 || '';
+        $original_so_far = $segment;
 
-        $segment =~ $capture_variable_segment_regexp;
-        push @segments, $1;
-        push @originals, $1;
-        if( $2 )
+#print "Capture top on '$original', segment '$segment', chain '$chain'\n";
+
+        if( $segment =~ $capture_function_regexp )
         {
-            #  var[ ... ] expression subscript notation.
-            my ( $index, $subscript );
+            push @originals, $segment;
+            $segment = $self->_compile_function( $1, $2, $original );
+            return( $segment ) unless $chain;
+            $segment = $segment->[ 2 ] if $segment->[ 0 ] == LITERAL;
+            push @segments, $segment;
+        }
+        else
+        {
+            push @segments, $segment;
+            push @originals, $segment;
+        }
+    }
+    else
+    {
+        #  TODO FIXME: error.
+        die "FIXME";
+    }
 
-            $subscript = substr( $2, 1, -1 );
-            $index = $self->_compile_expression( $subscript );
+    while( $chain and
+           ( $segment, $chain ) =
+                $chain =~ $capture_chained_operation_subscript_regexp )
+    {
+#        $segment = $1;
+#        $chain   = $2 || '';
+#print "Segment: $segment\nRest: $chain\n";
+
+        #  TODO: use a capture rather than m// and s///
+        if( $segment =~ $capture_literal_subscript_regexp )
+        {
+#print "  Literal\n";
+            $original_so_far .= $segment;
+            push @segments,  $1;
+            push @originals, $1;
+            next;
+        }
+        if( ( $subscript ) = $segment =~ $capture_expr_subscript_regexp )
+        {
+#print "  Expr\n";
+            #  var[ ... ] expression subscript notation.
+
+            $original_so_far .= $segment;
+#            $subscript = $1;
+            my $index = $self->_compile_expression( $subscript );
 
             #  If it's a constant push it up as if it
             #  was a dotted literal index.
@@ -2755,32 +2776,111 @@ sub _compile_var
             {
                 push @segments, $index;
             }
-            $subscript =~ s/^\s+//o;
-            $subscript =~ s/\s+$//o;
+#            $subscript =~ s/^\s+//o;
+#            $subscript =~ s/\s+$//o;
             push @originals, $subscript;
+            next;
+        }
+        #  TODO: use a capture rather than m// and s///
+        if( my ( $method, $args ) =
+                $segment =~ $capture_method_subscript_regexp )
+        {
+#print "  Method\n";
+
+            my $var = $self->_build_var( \@segments, \@originals,
+                $original_so_far );
+
+            if( $self->{ vmethods } )
+            {
+                #  We convert "vmethods" into our normal function style.
+
+                my $func = $self->_compile_function(
+                    $method, $args, $original, [ $var ] );
+
+                #  Fold if it's a literal.
+                $func = $func->[ 2 ] if $func->[ 0 ] == LITERAL;
+                @segments = ( $func );
+            }
+            else
+            {
+                $args = $self->_compile_function_args( $args );
+                @segments  = ( [ METHOD, $original, $var, $method, $args ] );
+            }
+            @originals = ( $original_so_far );
+            $original_so_far .= $segment;
+            next;
+        }
+        #  TODO FIXME: error.
+        die "FIXME";
+    }
+
+    $self->error( "Malformed variable segment: '$chain' in '$original'" )
+        if $chain;
+
+    return( $self->_build_var( \@segments, \@originals, $original ) );
+}
+
+sub _compile_function
+{
+    my ( $self, $func, $args, $expression, $prepend_args ) = @_;
+    my ( $numargs, $func_def );
+
+#    $args = length( $args) > 2 ? substr( $args, 1, -2 ) : '';
+
+    $func_def = $functions{ $func } if $functions{ $func };
+    $func_def = $self->{ local_functions }->{ $func }
+        if $self->{ local_functions } and
+           $self->{ local_functions }->{ $func };
+
+    $self->error( "Unknown function: $func" ) unless $func_def;
+
+    $args = $self->_compile_function_args( $args );
+    unshift @{$args}, @{$prepend_args} if $prepend_args;
+
+    #  Check the number of args.
+    if( ( $numargs = $func_def->[ FUNC_ARG_NUM ] ) >= 0 )
+    {
+        $self->error( "too few args to $func(), expected $numargs " .
+            "and got " . ( $#{$args} + 1 ) . " in $expression" )
+            if $#{$args} + 1 < $numargs;
+        $self->error( "too many args to $func(), expected $numargs " .
+            "and got " . ( $#{$args} + 1 ) . " in $expression" )
+            if $#{$args} + 1 > $numargs;
+    }
+
+    unless( $func_def->[ FUNC_INCONST ] )
+    {
+        my ( $nonliteral );
+
+        foreach my $arg ( @{$args} )
+        {
+            next if $arg->[ 0 ] == LITERAL;
+            $nonliteral = 1;
+            last;
+        }
+
+#CORE::warn( "$expression has " . ( $nonliteral ? "nonliteral" : "literal" ) . " args" );
+        unless( $nonliteral )
+        {
+            my ( $ret );
+
+            $ret = $self->_eval_function( $func, $args );
+
+            return( [ LITERAL, $expression,
+                ( ( ref( $ret ) eq 'SCALAR' ) ? ${$ret} : $ret ), 1 ] );
         }
     }
 
-    $self->error( "Malformed variable segment: '$var' in '$original'" )
-        if $var;
+    unshift @{$args}, [ TEMPLATE ]
+        if $func_def->[ FUNC_NEEDS_TEMPLATE ];
 
-    if( $segments[ $#segments ] eq '__size__' )
-    {
-        pop @segments;
-        pop @originals;
-        return( [ FUNC, $original, 'size',
-            [ [ VAR, $original, \@segments, \@originals, $#segments ] ],
-            ] );
-    }
-
-    return( [ VAR, $original, \@segments, \@originals, $#segments ] );
+    return( [ FUNC, $expression, $func, $args ] );
 }
 
-sub _compile_func_args
+sub _compile_function_args
 {
     my ( $self, $arglist ) = @_;
     my ( $original, @args, $nextarg );
-
 
     $arglist =~ s/^\s+//;
     $arglist =~ s/\s+$//;
@@ -2974,9 +3074,7 @@ sub _eval_var
     my ( $self, $instr, $original, $segments, $originals, $last, $undef_ok ) = @_;
     my ( $val, $stem, $i, $special_values, $leaf, $type );
 
-    #  Determine the stem (top-level) value
     $stem = $segments->[ 0 ];
-    $val  = $self->{ var_stack_top }->{ $stem };
     $special_values = $self->{ special_values };
 
     #  Check to see if it's a special loop variable or something.
@@ -2993,6 +3091,16 @@ sub _eval_var
     else
     {
         $i = 1;
+        #  Determine the stem (top-level) value
+        if( ref( $stem ) )
+        {
+            #  Top level is an expression not a var.
+            $val = $self->_eval_expression( $stem );
+        }
+        else
+        {
+            $val = $self->{ var_stack_top }->{ $stem };
+        }
     }
 
     #  Navigate our way down the remaining segments.
@@ -3107,30 +3215,27 @@ sub _eval_function
 
 sub _eval_method
 {
-    my ( $self, $var, $method, $args ) = @_;
-    my ( $varname, $ret );
+    my ( $self, $expr, $method, $args ) = @_;
+    my ( $exprdesc, $ret );
 
-    $varname = $var->[ 1 ];
-    $var = $self->_eval_var( @{$var} );
+    $exprdesc = $expr->[ 1 ];
+    $expr = $self->_eval_expression( $expr );
 
-    $self->error( "Can't call method on undefined value $varname" )
-        unless defined $var;
-    $self->error( "Can't call method on non-reference value $varname: $var" )
-        unless ref( $var );
+    $self->error( "Can't call method on undefined value $exprdesc" )
+        unless defined $expr;
+    $self->error( "Can't call method on non-reference value $exprdesc: $expr" )
+        unless ref( $expr );
 
     #  For security reasons we don't want to allow calling
     #  just any old method on any old object from within a
     #  potentially user-defined template.
     $self->error( 'Invalid method to call from within a template: ' .
-        ref( $var ) . "->$method" )
-        unless $var->valid_template_method( $method );
+        ref( $expr ) . "->$method" )
+        unless $expr->valid_template_method( $method );
 
     $args = [ map { $self->_eval_expression( $_ ) } @{$args} ];
 
-    {
-        no strict 'refs';
-        $ret = $var->$method( @{$args} );
-    }
+    $ret = $expr->$method( @{$args} );
 
     return( $ret );
 }
@@ -3550,7 +3655,7 @@ __END__
 
 =head1 NAME
 
-Template::Sandbox - Templates safely sandboxed from your application.
+Template::Sandbox - Fast template engine sandboxed from your application.
 
 =head1 SYNOPSIS
 
@@ -3820,6 +3925,8 @@ and end of a I<template token>.
 By default the opening delimiter is C<< <: >> and the closing delimiter
 is C<< :> >>.
 
+The C<open_delimiter> and C<close_delimiter> options were added in v1.02_01.
+
 =item B<allow_bare_expr> => I<0> | I<1>
 
 If set to a true value, this allows the C<expr> token to be ommited from
@@ -3839,6 +3946,41 @@ For example:
 
   #  Output:
   a is a fine letter
+
+The C<allow_bare_expr> option was added in v1.02_01.
+
+=item B<vmethods> => I<0> | I<1>
+
+If a set to a true value, this disables the usual behaviour of
+methods in L<Template::Sandbox> and instead causes any method
+calls to be rewritten as I<template function> calls with the
+"object" of the vmethod pushed onto the front of the arguments to
+the I<template function>.
+
+  $template = Template::Sandbox->new(
+      vmethods => 1,
+      );
+  #  With vmethods enabled, this:
+  $template->set_template_string( '<: expr aaa.substr( 2, 4 ) :>' );
+  #  is compiled to the equivilent of:
+  $template->set_template_string( '<: expr substr( aaa, 2, 4 ) :>' );
+
+This rewriting happens during compilation, so at runtime the
+behaviour is identical to if you had written the functional
+form directly.
+
+This also has the effect that when retreiving cached templates,
+only the value of C<vmethods> in the I<compiling> template instance
+matters, it is ignored in the I<executing> template instance entirely:
+avoid mixing and matching this option within template instances sharing
+the same cache, unless you want inconsistent and confusing behaviour.
+
+Also note that all the behaviour of I<template functions> apply,
+you will need to either add them yourself or import them from
+a I<template function library>, this option does not itself add
+any new functions.
+
+The C<vmethods> option was added in v1.02_02.
 
 =item B<template_toolkit_compat> => I<0> | I<1>
 
@@ -3860,6 +4002,7 @@ The options currently set make these two lines equivilent:
       open_delimiter  => '[%',
       close_delimiter => '%]',
       allow_bare_expr => 1,
+      vmethods        => 1,
       );
 
 If you provide values explictly for any of these constructor options, then
@@ -3893,13 +4036,18 @@ Some incompatable gotchas are:
 C<iterator.key> and C<iterator.value> in hash loops need to change to
 C<iterator> and C<iterator.__value__>.
 
-Vmethods will need rewriting as function calls, possibly with intermediate
-assignment to variables instead of chaining them.
+While vmethod syntax is supported, none of the standard
+L<Template::Toolkit> vmethods are provided.
+You can, however, write your own and L<Template::Sandbox::StringFunctions>
+and L<Template::Sandbox::NumberFunctions> might give you a good
+start.
 
-Any feature of L<Template::Toolkit> that doesn't have a corressponding
+Any feature of L<Template::Toolkit> that doesn't have a corresponding
 feature in L<Template::Sandbox> will also be unsupported.
 
 Still, it may ease the pain if you're converting simple templates.
+
+The C<template_toolkit_compat> option was added in v1.02_01.
 
 =back
 
@@ -4285,6 +4433,25 @@ double-underscores, some examples:
 
 These variables are described in the L</"SPECIAL VARIABLES"> section.
 
+A quirk of the parsing for I<methods> as well as I<template variables>
+means that you can use the C<< -> >> operator in place of the C<.>
+operator to seperate variable segments, permitting:
+
+  customer->address->street
+  customer[ 'address' ]->street
+  customer->address[ 'street' ]
+
+This is likely to confuse your perl programmers into trying this sort of
+thing though:
+
+  #  Won't work!
+  customer->[ 'address' ]->[ 'street' ]
+  #  Even further from working...
+  customer->{ 'address' }->{ 'street' }
+
+So my humble advice is to stick to using the dotted notation, so that
+it looks like Javascript.
+
 =head2 Operators
 
 Operators exist to combine various subexpressions into a larger
@@ -4489,6 +4656,12 @@ Methods are mostly provided for completeness, there are performance
 implications in using them detailed in
 L</"PERFORMANCE CONSIDERATIONS AND METRICS">, however it may be that
 someone will find them invaluable. Maybe.
+
+If you have set the C<vmethods> option to a true value then methods
+as detailed in this section cannot be compiled, instead they become
+equivilent to I<template functions> with the "object" pushed onto
+the front of the list of arguments.  See the L</"OPTIONS"> section
+for more details and examples.
 
 =head1 CONDITIONAL STATEMENTS
 
@@ -6231,7 +6404,7 @@ template position added.
 
 =head1 QUALITY ASSURANCE AND TEST METRICS
 
-As of version 1.02_01 there are 1337 tests within the distribution, if the
+As of version 1.02_02 there are 1989 tests within the distribution, if the
 this isn't the current version number, I've forgotton to update this section,
 sorry. :)
 
@@ -6240,11 +6413,11 @@ The tests have coverage:
   ---------------------------- ------ ------ ------ ------ ------ ------ ------
   File                           stmt   bran   cond    sub    pod   time  total
   ---------------------------- ------ ------ ------ ------ ------ ------ ------
-  blib/lib/Template/Sandbox.pm   98.9   91.9   89.0  100.0  100.0   99.8   95.8
-  ...mplate/Sandbox/Library.pm  100.0  100.0   36.4  100.0  100.0    0.2   93.1
+  blib/lib/Template/Sandbox.pm   98.7   91.1   89.2  100.0  100.0   99.8   95.5
+  ...mplate/Sandbox/Library.pm  100.0  100.0   36.4  100.0  100.0    0.1   93.1
   ...andbox/NumberFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
   ...andbox/StringFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
-  Total                          98.9   92.1   86.6  100.0  100.0  100.0   95.8
+  Total                          98.8   91.4   86.8  100.0  100.0  100.0   95.5
   ---------------------------- ------ ------ ------ ------ ------ ------ ------
 
 You can generate this report within the distribution's directory by:
