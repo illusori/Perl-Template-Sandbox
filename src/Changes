@@ -1,5 +1,13 @@
 Revision history for Template::Sandbox
 
+1.02_02 Version released at 2010-03-16-13:11.  *** Development version. ***
+        Version started at  2010-02-20-20:14.
+        Added vmethods support.
+        Extensive rewrite of variable, function and method parsing.
+        Added better permutations testing of sequential variable subscripts.
+        Replaced most single-point-of-use qr// with hard-coded //o for speed.
+        Performance impact: ~2% regained on compile phase, runtime unaffected.
+
 1.02_01 Version released at 2010-02-16-18:57.  *** Development version. ***
         Version started at  2010-02-16-12:10.
         Added open_delimiter and close_delimiter options.
