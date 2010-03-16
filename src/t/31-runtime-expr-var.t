@@ -5,10 +5,29 @@ use warnings;
 
 use Test::More;
 
-use Template::Sandbox;
+use Template::Sandbox qw/:function_sugar/;
 use Test::Exception;
 
-plan tests => ( 22 * 2 ) + 2;
+my @chain_one   = ( 'one',    "passthrough( one )" );
+my @chain_two   = ( '.two',   "[ 'two' ]",   ".get( 'two' )",   );
+my @chain_three = ( '.three', "[ 'three' ]", ".get( 'three' )", );
+my @chain_four  = ( '.four',  "[ 'four' ]",  ".get( 'four' )",  );
+my @chain_five  = ( '.five',  "[ 'five' ]",  ".get( 'five' )",  );
+
+my $chain_var = bless { two =>
+    bless { three =>
+    bless { four =>
+    bless { five =>
+    'chain var value',
+    }, 'Template::Sandbox::TestMethodObject'
+    }, 'Template::Sandbox::TestMethodObject'
+    }, 'Template::Sandbox::TestMethodObject'
+    }, 'Template::Sandbox::TestMethodObject';
+
+my $num_chain_permutations = scalar( @chain_one ) * scalar( @chain_two ) *
+    scalar( @chain_three ) * scalar( @chain_four ) * scalar( @chain_five );
+
+plan tests => ( ( 22 + ( $num_chain_permutations * 2 ) ) * 2 ) + 2;
 
 my ( $template, $syntax );
 
@@ -260,11 +279,46 @@ $template->set_template_string( $syntax );
 throws_ok { $template->run() }
     qr/Template runtime error: Can't index array-reference with string 'index index index' \(from 'b'\) in 'a\[ b \]' at line 1, char 1 of/,
     $expr_type . 'error on string index of array ref';
+
+#
+#  Permutations of indexing.
+foreach my $one ( @chain_one )
+{
+    foreach my $two ( @chain_two )
+    {
+        foreach my $three ( @chain_three )
+        {
+            foreach my $four ( @chain_four )
+            {
+                SKIP: foreach my $five ( @chain_five )
+                {
+                    $syntax = "<:$token $one$two$three$four$five :>";
+#print "#testing $syntax\n";
+                    $template = $expr_type eq '' ?
+                        Template::Sandbox->new() :
+                        Template::Sandbox->new( allow_bare_expr => 1 );
+                    $template->register_template_function(
+                        'passthrough' =>
+                            ( one_arg sub { $_[ 0 ] } ),
+                        );
+                    $template->add_var( one => $chain_var );
+                    lives_ok { $template->set_template_string( $syntax ) }
+                        "permutations: $syntax compile";
+                    skip 'Skipping run - compile failed', 1 if $@;
+#use Data::Dumper;
+#print Data::Dumper::Dumper( $template ) if $syntax =~ /get/;
+                    is( ${$template->run()}, 'chain var value',
+                        "permutations: $syntax run" );
+                }
+            }
+        }
+    }
+}
 }
 
 
 #
-#  45: clear_vars() before compile removes var
+#  +1: clear_vars() before compile removes var
 $syntax = "<: expr a :>";
 $template = Template::Sandbox->new();
 $template->add_var( a => 42 );
@@ -275,7 +329,7 @@ warns_ok { $template->run() }
     'clear_vars() before compile remove var';
 
 #
-#  46: clear_vars() after compile removes var
+#  +2: clear_vars() after compile removes var
 $syntax = "<: expr a :>";
 $template = Template::Sandbox->new();
 $template->add_var( a => 42 );
@@ -284,3 +338,21 @@ $template->clear_vars();
 warns_ok { $template->run() }
     qr/Template runtime error: undefined template value 'a' at line 1, char 1 of/,
     'clear_vars() after compile remove var';
+
+package Template::Sandbox::TestMethodObject;
+
+sub valid_template_method
+{
+    my ( $self, $method ) = @_;
+
+    return( 1 );
+}
+
+sub get
+{
+    my ( $self, $index ) = @_;
+
+    return( $self->{ $index } );
+}
+
+1;
