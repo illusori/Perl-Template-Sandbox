@@ -6,8 +6,9 @@ use warnings;
 use Test::More;
 
 use Template::Sandbox;
+use Template::Sandbox::StringFunctions;
 
-plan tests => 1;
+plan tests => 5;
 
 my ( $template, $syntax, $expected );
 
@@ -39,9 +40,8 @@ foo foo foo foo foo foo foo foo foo foo foo foo
 [% 10 + 12 %]
 [% variable_expression_a * variable_expression_b %]
 [% ( ( variable_expression_a * variable_expression_b ) + variable_expression_a - variable_expression_b ) / variable_expression_b %]
+[% variable_function_arg.substr( 4, 2 ) %]
 END_OF_TEMPLATE
-#  Unimplemented:
-#[% variable_function_arg.substr( 4, 2 ) %]
 
 $expected = <<'END_OF_EXPECTED';
 foo foo foo foo foo foo foo foo foo foo foo foo
@@ -68,10 +68,12 @@ Nay, Mister Wilks
 22
 200
 21
+he
 END_OF_EXPECTED
 
 $template = Template::Sandbox->new(
     template_toolkit_compat => 1,
+    library => [ 'Template::Sandbox::StringFunctions' => qw/substr/ ],
     );
 $template->set_template_string( $syntax );
 
@@ -113,3 +115,23 @@ $template->add_vars( {
 
 is( ${$template->run()}, $expected,
     'template toolkit compat' );
+
+my %option_values = (
+    open_delimiter  => '<*',
+    close_delimiter => '*>',
+    allow_bare_expr => 0,
+    vmethods        => 0,
+    );
+
+#
+#  2-5: Check manually supplied options aren't overwritten.
+foreach my $option
+    ( qw/open_delimiter close_delimiter allow_bare_expr vmethods/ )
+{
+    $template = Template::Sandbox->new(
+        template_toolkit_compat => 1,
+        $option                 => $option_values{ $option },
+        );
+    is( $template->{ $option }, $option_values{ $option },
+        "manual $option option overrides template_toolkit_compat" );
+}
