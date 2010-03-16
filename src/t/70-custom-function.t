@@ -52,7 +52,7 @@ $syntax2   = "<: expr ${function2}() :>";
 $template = Template::Sandbox->new();
 throws_ok { $template->set_template_string( $syntax ) }
     qr/compile error: Unknown function: nonexistingfunction at line 1, char 1 of/,
-    "verify custom syntax doesn't exist already";
+    "verify custom function doesn't exist already";
 
 #
 #  2-4:  Function added during construction.
