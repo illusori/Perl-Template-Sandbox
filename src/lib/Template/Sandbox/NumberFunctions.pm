@@ -7,7 +7,7 @@ use base 'Template::Sandbox::Library';
 
 use Template::Sandbox qw/:function_sugar/;
 
-$Template::Sandbox::NumberFunctions::VERSION = '1.02_01';
+$Template::Sandbox::NumberFunctions::VERSION = '1.02_02';
 
 #  From perlfaq5: add thousands-commas to number.
 #  Yes it doesn't respect locale.
