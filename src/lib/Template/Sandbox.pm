@@ -853,7 +853,7 @@ sub initialize
 #  Neccessary?
 #            eval "use $arg->[ 0 ];";
             $arg->[ 0 ]->export_template_functions( $self,
-                @{$arg}[ 1..$#{$arg} ] );
+                @{$arg}[ 1..@{$arg} - 1 ] );
         }
     }
 
@@ -1452,7 +1452,7 @@ sub _replace_defines
     if( $top )
     {
         delete $self->{ seen_defines };
-        delete $self->{ offsets } if $#{$self->{ offsets }} == -1;
+        delete $self->{ offsets } unless @{$self->{ offsets }};
         if( $self->{ offsets } )
         {
             #  pos() gives us position in original string, we need to
@@ -1538,14 +1538,14 @@ sub _parse_args
     #  Merge quoted args.
 #  TODO: rename instr to in_str for semantic clarity vs "instr"uction.
     $instr = 0;
-    for( $count = 0; $count <= $#words; $count++ )
+    for( $count = 0; $count < @words; $count++ )
     {
         if( $instr )
         {
             $instr = 0 if $words[ $count ] =~ /\"$/;
             $words[ $count - 1 ] .= ' ' . $words[ $count ];
             @words =
-                ( @words[ 0..$count - 1 ], @words[ $count + 1..$#words ] );
+                ( @words[ 0..$count - 1 ], @words[ $count + 1..@words - 1 ] );
             $count--;
         }
         else
@@ -1557,18 +1557,20 @@ sub _parse_args
     }
 
     #  Split into positional parameters and keyword paramaters.
-    for( $count = 0; $count <= $#words; $count++ )
+    for( $count = 0; $count < @words; $count++ )
     {
         last if $words[ $count ] =~ /=/;
     }
 
-    @pos_param     = $count            ? @words[ 0..$count - 1 ]   : ();
-    @keyword_param = $count <= $#words ? @words[ $count..$#words ] : ();
+    @pos_param     = $count ? @words[ 0..$count - 1 ]   : ();
+    @keyword_param = $count < @words ?
+        @words[ $count..@words - 1 ] : ();
 
     #  Squidge any "overshoot" positional param onto the final pos param.
-    @pos_param = ( @pos_param[ 0..$#positions - 1 ],
-        join( ' ', @pos_param[ $#positions..$#pos_param ] ) )
-        if $#pos_param > $#positions;
+    #  TODO: splice!
+    @pos_param = ( @pos_param[ 0..@positions - 2 ],
+        join( ' ', @pos_param[ @positions - 1..@pos_param - 1 ] ) )
+        if @pos_param > @positions;
 
     $count = 0;
     foreach my $word ( @pos_param )
@@ -1670,7 +1672,7 @@ sub _compile_template
     $self->{ phase }     = 'compile';
 
 #my ( $dumpme );
-    for( $i = 0; $i <= $#hunks; $i++ )
+    for( $i = 0; $i < @hunks; $i++ )
     {
         my ( $hunk, $pos, $lines, $queue_pos, $last, $hunklen, $hunkstart,
              $offset_index );
@@ -1705,7 +1707,7 @@ sub _compile_template
             if( $token eq 'end' )
             {
                 $self->error( "end found without opening block" )
-                    if $#nest_stack == -1;
+                    unless @nest_stack;
                 $token = ( $nest_stack[ 0 ][ 0 ] eq FOR ) ?
                     'endfor' : 'endif';
             }
@@ -1721,11 +1723,11 @@ sub _compile_template
             #  empty lines in the output.
             #  Are we a zero-width token on a line by itself?
             if( $syntax->{ zero_width } and
-                $i < $#hunks and
-                ( $#compiled == -1 or
-                  ( $compiled[ $#compiled ]->[ 0 ] == LITERAL and
-                    $compiled[ $#compiled ]->[ 2 ] =~ /\n\ *$/ ) or
-                  ( $compiled[ $#compiled ]->[ 0 ] == CONTEXT_PUSH ) ) and
+                $i < @hunks - 1 and
+                ( ( not @compiled ) or
+                  ( $compiled[ @compiled - 1 ]->[ 0 ] == LITERAL and
+                    $compiled[ @compiled - 1 ]->[ 2 ] =~ /\n\ *$/ ) or
+                  ( $compiled[ @compiled - 1 ]->[ 0 ] == CONTEXT_PUSH ) ) and
                 $hunks[ $i + 1 ] =~ /^\n\ */ )
             {
                 $trim_next = 1;
@@ -1750,7 +1752,7 @@ sub _compile_template
             {
                 $args = $self->_parse_args( $args, $token );
 
-                $args = 0 unless scalar( keys( %{$args} ) );
+                $args = 0 unless keys( %{$args} );
 
                 push @compiled,
                     [ DEBUG, $pos, $args ];
@@ -1789,13 +1791,13 @@ sub _compile_template
 #                    [ JUMP_IF, $pos, undef,
 #                       $self->_compile_expression( $args ),
 #                       $token eq 'if' ? 1 : 0 ];
-                unshift @nest_stack, [ 'if', $#compiled ];
+                unshift @nest_stack, [ 'if', @compiled - 1 ];
             }
             elsif( $token eq 'elsif' or $token eq 'elsunless' )
             {
                 my ( $expr );
 
-                if( $#nest_stack == -1 or
+                if( ( not @nest_stack ) or
                     ( $nest_stack[ 0 ][ 0 ] ne 'if' and
                       $nest_stack[ 0 ][ 0 ] ne 'elsif' ) )
                 {
@@ -1824,12 +1826,12 @@ sub _compile_template
 #                       $token eq 'elsif' ? 1 : 0 ];
                 #  Now, update jump address of previous if/elsif
                 $compiled[ $nest_stack[ 0 ][ 1 ] ][ 2 ] =
-                    $#compiled;
-                unshift @nest_stack, [ 'elsif', $#compiled ];
+                    @compiled - 1;
+                unshift @nest_stack, [ 'elsif', @compiled - 1 ];
             }
             elsif( $token eq 'else' )
             {
-                if( $#nest_stack == -1 or
+                if( ( not @nest_stack ) or
                     ( $nest_stack[ 0 ][ 0 ] ne 'if' and
                       $nest_stack[ 0 ][ 0 ] ne 'elsif' ) )
                 {
@@ -1839,13 +1841,12 @@ sub _compile_template
                 push @compiled,
                     [ JUMP, $pos, undef ];
                 #  Now, update jump address of previous if/elsif
-                $compiled[ $nest_stack[ 0 ][ 1 ] ][ 2 ] =
-                    $#compiled + 1;
-                unshift @nest_stack, [ 'else', $#compiled + 1 ];
+                $compiled[ $nest_stack[ 0 ][ 1 ] ][ 2 ] = @compiled;
+                unshift @nest_stack, [ 'else', scalar( @compiled ) ];
             }
             elsif( $token eq 'endif' or $token eq 'endunless' )
             {
-                if( $#nest_stack == -1 or
+                if( ( not @nest_stack ) or
                     ( $nest_stack[ 0 ][ 0 ] ne 'if' and
                       $nest_stack[ 0 ][ 0 ] ne 'elsif' and
                       $nest_stack[ 0 ][ 0 ] ne 'else' ) )
@@ -1855,15 +1856,12 @@ sub _compile_template
                 }
 
                 #  Update jump address of previous if/elsif
-                $compiled[ $nest_stack[ 0 ][ 1 ] ][ 2 ] =
-                    $#compiled + 1
+                $compiled[ $nest_stack[ 0 ][ 1 ] ][ 2 ] = @compiled
                     unless $nest_stack[ 0 ][ 0 ] eq 'else';
 
-                while( $#nest_stack != -1 )
+                while( @nest_stack )
                 {
-                    my ( $last );
-
-                    $last = shift @nest_stack;
+                    my $last = shift @nest_stack;
 
                     if( $last->[ 0 ] eq 'if' )
                     {
@@ -1874,7 +1872,7 @@ sub _compile_template
                     {
                         #  Need to update the jump address of the closing
                         #  jump of the block _prior_ to this elsif/else.
-                        $compiled[ $last->[ 1 ] - 1 ][ 2 ] = $#compiled + 1;
+                        $compiled[ $last->[ 1 ] - 1 ][ 2 ] = @compiled;
                     }
                     else
                     {
@@ -1895,20 +1893,18 @@ sub _compile_template
                     [ FOR, $pos, undef, $iterator,
                       $self->_compile_expression( $set ),
                       1 ];
-                unshift @nest_stack, [ FOR, $#compiled ];
+                unshift @nest_stack, [ FOR, @compiled - 1 ];
             }
             elsif( $token eq 'endfor' )
             {
-                my ( $last );
-
-                if( $#nest_stack == -1 or
+                if( ( not @nest_stack ) or
                     $nest_stack[ 0 ][ 0 ] ne FOR )
                 {
                     $self->error(
                          "endfor found without opening for" );
                 }
 
-                $last = shift @nest_stack;
+                my $last = shift @nest_stack;
 
                 #  Grab our iterator and set from the opening for
                 #  TODO: needed anymore?  run grabs it from for-stack.
@@ -1917,7 +1913,7 @@ sub _compile_template
                       $compiled[ $last->[ 1 ] ][ 3 ],
                       $compiled[ $last->[ 1 ] ][ 4 ] ];
                 #  Update jump address of opening for.
-                $compiled[ $last->[ 1 ] ][ 2 ] = $#compiled + 1;
+                $compiled[ $last->[ 1 ] ][ 2 ] = @compiled;
             }
             elsif( $token eq 'include' )
             {
@@ -1962,7 +1958,7 @@ sub _compile_template
                     $args = { map
                         { $_ => $self->_compile_expression( $args->{ $_ } ) }
                         keys( %{$args} ) };
-                    $args = 0 unless scalar( keys( %{$args} ) );
+                    $args = 0 unless keys( %{$args} );
 
                     $filename = $self->find_include( $filename, $current_dir );
 
@@ -1985,8 +1981,8 @@ sub _compile_template
                         [ CONTEXT_PUSH, $pos, $args ];
                     unless( exists( $file_numbers{ $filename } ) )
                     {
+                        $file_numbers{ $filename } = @files;
                         push @files, $filename;
-                        $file_numbers{ $filename } = $#files;
                     }
                     $queue_pos = [ $file_numbers{ $filename }, 1, 1, 0,
                         $self->{ offsets } ];
@@ -1999,13 +1995,11 @@ sub _compile_template
                 #  in from a template (isn't valid syntax even), but gets
                 #  inserted to mark the end of the inserted hunks from
                 #  an <: include :>
-                my ( $last );
-
                 #  "cannot happen".
                 $self->error( "endinclude found while not within an include" )
-                    if $#pos_stack == 0;
+                    unless @pos_stack;
 
-                $last = shift @pos_stack;
+                my $last = shift @pos_stack;
                 delete $includes{ $files[ $last->[ 0 ] ] };
                 shift @define_stack;
                 $self->{ defines } = $define_stack[ 0 ];
@@ -2035,8 +2029,8 @@ sub _compile_template
             }
             if( length( $hunk ) )
             {
+                $trim{ @compiled } = 1 if $trim_next;
                 push @compiled, [ LITERAL, $pos, $hunk ];
-                $trim{ $#compiled } = 1 if $trim_next;
             }
             $trim_next = 0;
         }
@@ -2076,7 +2070,7 @@ sub _compile_template
 
         #  Do we have offsets, and have we just passed one?
         $offset_index = -1;
-        while( $pos->[ 4 ] and $offset_index < $#{$pos->[ 4 ]} and
+        while( $pos->[ 4 ] and $offset_index < @{$pos->[ 4 ]} - 1 and
                $pos->[ 4 ]->[ $offset_index + 1 ]->[ 0 ] <= $pos->[ 3 ] )
         {
             my ( $offset );
@@ -2118,7 +2112,7 @@ sub _compile_template
             my ( @offsets, $nlpos );
 
             @offsets = splice( @{$pos->[ 4 ]}, 0, $offset_index + 1 );
-            $pos->[ 4 ] = undef if $#{$pos->[ 4 ]} == -1;
+            $pos->[ 4 ] = undef unless @{$pos->[ 4 ]};
 
             $nlpos = $lines ? ( $pos->[ 3 ] - $pos->[ 2 ] ) : 0;
 
@@ -2137,12 +2131,10 @@ sub _compile_template
         unshift @pos_stack, $queue_pos if $queue_pos;
     }
 
-    $self->error( "unterminated if or for block" )
-        if $#nest_stack != -1;
+    $self->error( "unterminated if or for block" ) if @nest_stack;
 
     #  "cannot happen".
-    $self->error( "include stack not empty, corrupted?" )
-        if $#pos_stack != 0;
+    $self->error( "include stack not empty, corrupted?" ) if @pos_stack > 1;
 
     #  TODO: scan for undef jump addresses.
 
@@ -2164,7 +2156,8 @@ sub _compile_template
             files   => \@files,
         };
     $self->_optimize_template();
-    $self->{ template }->{ last_instr } = $#{$self->{ template }->{ program }};
+    $self->{ template }->{ last_instr } =
+        @{$self->{ template }->{ program }} - 1;
 
     delete $self->{ current_pos };
     delete $self->{ pos_stack };
@@ -2196,7 +2189,7 @@ sub _optimize_template
     $program = $self->{ template }->{ program };
 
     #  Fold constant expr into constant instr.
-    for( my $i = 0; $i <= $#{$program}; $i++ )
+    for( my $i = 0; $i < @{$program}; $i++ )
     {
         #  Are we an EXPR instr and is our expr a LITERAL expr?
         next unless $program->[ $i ]->[ 0 ] == EXPR and
@@ -2211,7 +2204,7 @@ sub _optimize_template
 
     #  Fold constant JUMP_IF into JUMP or delete.
     %deletes    = ();
-    for( my $i = 0; $i <= $#{$program}; $i++ )
+    for( my $i = 0; $i < @{$program}; $i++ )
     {
         next unless $program->[ $i ]->[ 0 ] == JUMP_IF and
                     $program->[ $i ]->[ 3 ]->[ 0 ] == LITERAL;
@@ -2239,7 +2232,7 @@ sub _optimize_template
     #  Trim empty context pushes (TODO: that have no assigns in top level)
     %deletes    = ();
     @nest_stack = ();
-    for( my $i = 0; $i <= $#{$program}; $i++ )
+    for( my $i = 0; $i < @{$program}; $i++ )
     {
         if( $program->[ $i ]->[ 0 ] == CONTEXT_PUSH )
         {
@@ -2275,7 +2268,7 @@ sub _optimize_template
     }
 
     #  Now scan for adjacent literals.
-    for( my $i = $#{$program}; $i > 0; $i-- )
+    for( my $i = @{$program} - 1; $i > 0; $i-- )
     {
         #  Are both ourself and our previous instr a literal?
         next if $program->[ $i ]->[ 0 ]     != LITERAL or
@@ -2296,7 +2289,7 @@ sub _optimize_template
 
     #  Look for loops that make no use of special loop vars.
     @loop_blocks = ();
-    for( my $i = 0; $i <= $#{$program}; $i++ )
+    for( my $i = 0; $i < @{$program}; $i++ )
     {
         #  Are we a for statement?
         next if $program->[ $i ]->[ 0 ] != FOR;
@@ -2474,7 +2467,7 @@ sub _delete_instr
     #  Now we need to renumber any jump and loop targets affected.
     %renumbers = ();
     $lastnum = $lastoffset = 0;
-    $numaddr = $#addrs;
+    $numaddr = @addrs - 1;
     foreach my $line ( @{$program} )
     {
         next unless ( $instr = $line->[ 0 ] ) == JUMP or
@@ -2542,7 +2535,7 @@ sub _compile_expression
     }
 
     return( $self->_build_op_tree( [ @top_level, $expression ] ) )
-        if $#top_level >= 0;
+        if @top_level;
 
     #  Not a compound statement, must be atomic.
 
@@ -2601,8 +2594,10 @@ sub _build_op_tree
 
 #print "build_op_tree( ", Data::Dumper::Dumper( $arr ), "\n";
 
+    #  "cannot happen"
     $self->error( "Empty expression" ) unless @{$arr};
 
+#  TODO: cache @{$arr} size.
     for( my $i = 0; $i < @{$arr}; $i += 2 )
     {
         #  TODO: this is a crappy hack to provide compat with recursion.
@@ -2668,7 +2663,7 @@ sub _build_op_tree
 
     $op  = $arr->[ $highest_pos ];
     $lhs = $self->_build_op_tree( [ @{$arr}[ 0..$highest_pos - 1 ] ] );
-    $rhs = $self->_build_op_tree( [ @{$arr}[ $highest_pos + 1..( @{$arr} - 1 ) ] ] );
+    $rhs = $self->_build_op_tree( [ @{$arr}[ $highest_pos + 1..@{$arr} - 1 ] ] );
 
     return( [ OP_TREE, '', $op, $lhs, $rhs ] );
 }
@@ -2682,9 +2677,9 @@ sub _build_var
     #  If we're just a subexpression with no subscripts, just return
     #  the subexpression.
     return( $segments[ 0 ] )
-        if $#segments == 0 and ref( $segments[ 0 ] );
+        if @segments == 1 and ref( $segments[ 0 ] );
 
-    if( $segments[ $#segments ] eq '__size__' )
+    if( $segments[ @segments - 1 ] eq '__size__' )
     {
         pop @segments;
         pop @originals;
@@ -2693,7 +2688,7 @@ sub _build_var
             ] );
     }
 
-    return( [ VAR, $original, \@segments, \@originals, $#segments ] );
+    return( [ VAR, $original, \@segments, \@originals, @segments - 1 ] );
 }
 
 sub _compile_chained_operation
@@ -2841,11 +2836,11 @@ sub _compile_function
     if( ( $numargs = $func_def->[ FUNC_ARG_NUM ] ) >= 0 )
     {
         $self->error( "too few args to $func(), expected $numargs " .
-            "and got " . ( $#{$args} + 1 ) . " in $expression" )
-            if $#{$args} + 1 < $numargs;
+            "and got " . @{$args} . " in $expression" )
+            if @{$args} < $numargs;
         $self->error( "too many args to $func(), expected $numargs " .
-            "and got " . ( $#{$args} + 1 ) . " in $expression" )
-            if $#{$args} + 1 > $numargs;
+            "and got " . @{$args} . " in $expression" )
+            if @{$args} > $numargs;
     }
 
     unless( $func_def->[ FUNC_INCONST ] )
@@ -3045,15 +3040,15 @@ sub _assign_var
 
     #  TODO: this should be compile-time ideally.
     $self->error( "Can only assign to top-level variables: $lhs->[ 1 ]" )
-        if $#{$lhs->[ 2 ]} > 0;
+        if @{$lhs->[ 2 ]} > 1;
 
     $var = $lhs->[ 2 ]->[ 0 ];
 
     $var_stack = $self->{ var_stack };
     $var_stack->[ 0 ]->{ $var } = $rhs;
-    $sz      = $#{$var_stack};
+    $sz      = @{$var_stack};
     $counter = 1;
-    while( $counter <= $sz )
+    while( $counter < $sz )
     {
         return( $rhs ) unless exists( $var_stack->[ $counter ]->{ $var } );
         $var_stack->[ $counter ]->{ $var } = $rhs;
@@ -3340,7 +3335,8 @@ sub run
                 $set_value = [ 0..int( $set_value ) ];
             }
 
-            $last = $#{$set_value};
+#  TODO: assign and compare
+            $last = @{$set_value} - 1;
             if( $last == -1 )
             {
                 $lineno = $line->[ 2 ];
