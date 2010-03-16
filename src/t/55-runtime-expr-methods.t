@@ -60,9 +60,13 @@ throws_ok { ${$template->run()} }
 $syntax = "<: expr testob.forbidden_method() :>";
 $template = Template::Sandbox->new();
 $template->set_template_string( $syntax );
-throws_ok { ${$template->run()} }
-    qr/runtime error: Can't call method on undefined value testob at line 1, char 1 of/,
-    'expr error calling method on undefined value';
+{
+    #  Suppress the undef testob warning, we know, that's why we're doing it.
+    local $SIG{ __WARN__ } = sub { };
+    throws_ok { ${$template->run()} }
+qr/runtime error: Can't call method on undefined value testob at line 1, char 1 of/,
+        'expr error calling method on undefined value';
+}
 
 
 package Template::Sandbox::TestMethodObject;
