@@ -1,5 +1,23 @@
 Revision history for Template::Sandbox
 
+1.03    Version released at 2010-03-22-14:56.
+        Version started at  2010-03-22-14:53.
+        Released rc 1.02_02 as 1.03 stable.
+
+        Summary of changes since 1.02:
+
+        Additions:
+            Added open_delimiter and close_delimiter options.
+            Added allow_bare_expr option.
+            Added vmethods option.
+            Added <: end :> synonym for <: endif :> and <: endfor :>.
+            Added template_toolkit_compat option.
+
+        Enhancements:
+            Improved clarity of some error messages.
+            Expanded performance documentation using Template::Benchmark.
+            Made token-parsing case-insensitive.
+
 1.02_02 Version released at 2010-03-16-13:11.  *** Development version. ***
         Version started at  2010-02-20-20:14.
         Added vmethods support.
@@ -34,7 +52,7 @@ Revision history for Template::Sandbox
             clear_vars() method added.
 
         Enhancements:
-            Improved support for windows.
+            Improved support for Windows OS.
             Improved support for localized perls in the test-suite.
             Optimizatons to performance throughout.
             Documentation improvements.
