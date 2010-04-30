@@ -1,5 +1,9 @@
 Revision history for Template::Sandbox
 
+1.03_01 Version released at 2010-04-30-21:04.  *** Development version. ***
+        Version started at  2010-04-30-21:01.
+        Fixed 88-misc.t to handle altered Data::Dumper behavior in perl 5.12.
+
 1.03    Version released at 2010-03-22-14:56.
         Version started at  2010-03-22-14:53.
         Released rc 1.02_02 as 1.03 stable.
