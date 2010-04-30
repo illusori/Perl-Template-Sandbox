@@ -13,8 +13,8 @@ my ( $template, $syntax );
 
 #
 #  1: tersedump()
-is( Template::Sandbox::_tersedump( { a => 1 } ),
-    "{\n          \"a\" => 1\n        }\n",
+like( Template::Sandbox::_tersedump( { a => 1 } ),
+    qr/^\s*\{\s+\"a\"\s+=>\s+1\s+\}\s*$/,
     '_tersedump()' );
 
 #
