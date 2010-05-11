@@ -560,7 +560,7 @@ BEGIN
 {
     use Exporter   ();
 
-    $Template::Sandbox::VERSION     = '1.03_01';
+    $Template::Sandbox::VERSION     = '1.04';
     @Template::Sandbox::ISA         = qw( Exporter );
 
     @Template::Sandbox::EXPORT      = qw();
@@ -6423,7 +6423,7 @@ template position added.
 
 =head1 QUALITY ASSURANCE AND TEST METRICS
 
-As of version 1.02_02 there are 1989 tests within the distribution, if the
+As of version 1.04 there are 1993 tests within the distribution, if the
 this isn't the current version number, I've forgotton to update this section,
 sorry. :)
 
@@ -6432,11 +6432,11 @@ The tests have coverage:
   ---------------------------- ------ ------ ------ ------ ------ ------ ------
   File                           stmt   bran   cond    sub    pod   time  total
   ---------------------------- ------ ------ ------ ------ ------ ------ ------
-  blib/lib/Template/Sandbox.pm   98.7   91.1   89.2  100.0  100.0   99.8   95.5
+  blib/lib/Template/Sandbox.pm   98.7   91.9   89.2  100.0  100.0   99.8   95.7
   ...mplate/Sandbox/Library.pm  100.0  100.0   36.4  100.0  100.0    0.1   93.1
   ...andbox/NumberFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
   ...andbox/StringFunctions.pm  100.0    n/a    n/a  100.0    n/a    0.0  100.0
-  Total                          98.8   91.4   86.8  100.0  100.0  100.0   95.5
+  Total                          98.8   92.2   86.8  100.0  100.0  100.0   95.7
   ---------------------------- ------ ------ ------ ------ ------ ------ ------
 
 You can generate this report within the distribution's directory by:
