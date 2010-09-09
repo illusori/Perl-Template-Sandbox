@@ -175,10 +175,10 @@ my %functions = (
         {
             return( undef ) unless defined( $_[ 0 ] );
             my $type = Scalar::Util::reftype( $_[ 0 ] );
-            return( $type eq 'HASH'   ? scalar( keys( %{$_[ 0 ]} ) ) :
+            return( !$type ? length( $_[ 0 ] ) :
+                    $type eq 'HASH'   ? scalar( keys( %{$_[ 0 ]} ) ) :
                     $type eq 'ARRAY'  ? scalar( @{$_[ 0 ]} ) :
-                    $type eq 'SCALAR' ? length( ${$_[ 0 ]} ) :
-                                        length( $_[ 0 ] ) );
+                    length( ${$_[ 0 ]} ) );
         } ),
 
     defined => ( one_arg undef_ok sub { defined( $_[ 0 ] ) ? 1 : 0 } ),
