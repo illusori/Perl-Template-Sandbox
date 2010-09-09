@@ -12,7 +12,7 @@ my %function_tags    = ();
 
 BEGIN
 {
-    $Template::Sandbox::Library::VERSION = '1.04';
+    $Template::Sandbox::Library::VERSION = '1.04_01';
 }
 
 sub import
