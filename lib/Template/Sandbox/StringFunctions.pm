@@ -1,4 +1,5 @@
 package Template::Sandbox::StringFunctions;
+# ABSTRACT: Basic string functions library for Template::Sandbox.
 
 use strict;
 use warnings;

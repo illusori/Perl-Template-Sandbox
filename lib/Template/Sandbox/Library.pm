@@ -1,4 +1,5 @@
 package Template::Sandbox::Library;
+# ABSTRACT: Base library object for Template::Sandbox functions.
 
 use strict;
 use warnings;

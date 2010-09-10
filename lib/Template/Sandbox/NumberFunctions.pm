@@ -1,4 +1,5 @@
 package Template::Sandbox::NumberFunctions;
+# ABSTRACT: Basic number functions library for Template::Sandbox.
 
 use strict;
 use warnings;

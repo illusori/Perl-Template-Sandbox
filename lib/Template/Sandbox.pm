@@ -1,14 +1,5 @@
-#
-#  Template::Sandbox: Yet Another Template System.
-#
-#  Known issues:
-#    - ${VALUE} define replacement breaks char-count and potentially
-#      line count values (if ${VALUE} has newlines).
-#
-#  Future ideas:
-#
-
 package Template::Sandbox;
+# ABSTRACT: Fast pure-perl template engine sandboxed from your application.
 
 use strict;
 use warnings;
