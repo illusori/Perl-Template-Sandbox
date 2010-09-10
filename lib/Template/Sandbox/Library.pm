@@ -131,6 +131,10 @@ __END__
 
 Template::Sandbox::Library - Base library object for Template::Sandbox functions.
 
+=head1 VERSION
+
+version 1.04_01
+
 =head1 SYNOPSIS
 
   package MyApp::TemplateMaths;
@@ -309,7 +313,6 @@ You can find documentation for this module with the perldoc command.
 
     perldoc Template::Sandbox::Library
 
-
 You can also look for information at:
 
 =over 4
@@ -332,17 +335,15 @@ L<http://search.cpan.org/dist/Template-Sandbox>
 
 =back
 
-=head1 AUTHORS
+=head1 AUTHOR
 
-Original author: Sam Graham <libtemplate-sandbox-perl BLAHBLAH illusori.co.uk>
+Sam Graham <libtemplate-sandbox-perl BLAHBLAH illusori.co.uk>
 
-Last author:     $Author: illusori $
+=head1 COPYRIGHT AND LICENSE
 
-=head1 COPYRIGHT & LICENSE
+This software is copyright (c) 2005-2010 by Sam Graham <libtemplate-sandbox-perl BLAHBLAH illusori.co.uk>.
 
-Copyright 2005-2010 Sam Graham, all rights reserved.
-
-This library is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 
 =cut

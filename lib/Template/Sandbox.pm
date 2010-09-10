@@ -3642,7 +3642,11 @@ __END__
 
 =head1 NAME
 
-Template::Sandbox - Fast template engine sandboxed from your application.
+Template::Sandbox - Fast pure-perl template engine sandboxed from your application.
+
+=head1 VERSION
+
+version 1.04_01
 
 =head1 SYNOPSIS
 
@@ -6643,7 +6647,6 @@ You can find documentation for this module with the perldoc command.
 
     perldoc Template::Sandbox
 
-
 You can also look for information at:
 
 =over 4
@@ -6673,17 +6676,15 @@ with L<Template::Alloy>, the benchmarks in the
 L</"PERFORMANCE CONSIDERATIONS AND METRICS"> section were generated
 with a modified version of this script.
 
-=head1 AUTHORS
+=head1 AUTHOR
 
-Original author: Sam Graham <libtemplate-sandbox-perl BLAHBLAH illusori.co.uk>
+Sam Graham <libtemplate-sandbox-perl BLAHBLAH illusori.co.uk>
 
-Last author:     $Author: illusori $
+=head1 COPYRIGHT AND LICENSE
 
-=head1 COPYRIGHT & LICENSE
+This software is copyright (c) 2005-2010 by Sam Graham <libtemplate-sandbox-perl BLAHBLAH illusori.co.uk>.
 
-Copyright 2005-2010 Sam Graham, all rights reserved.
-
-This library is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 
 =cut
