@@ -2722,8 +2722,7 @@ sub _compile_chained_operation
     }
     else
     {
-        #  TODO FIXME: error.
-        die "FIXME";
+        $self->error( "Malformed chained operator: '$chain'" );
     }
 
     while( $chain and
@@ -2796,8 +2795,7 @@ sub _compile_chained_operation
             $original_so_far .= $segment;
             next;
         }
-        #  TODO FIXME: error.
-        die "FIXME";
+        $self->error( "Unknown chained operator subsection: '$segment' in '$original'" );
     }
 
     $self->error( "Malformed variable segment: '$chain' in '$original'" )
