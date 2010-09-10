@@ -34,11 +34,7 @@ my $build = Module::Build->new(
         },
     meta_merge => {
         'resources' => {
-            'repository' => {
-                'type'  => 'git',
-                'url'   => 'git://github.com/illusori/Perl-Template-Sandbox.git',
-                'web'   => 'http://github.com/illusori/Perl-Template-Sandbox',
-                },
+            'repository' => 'http://github.com/illusori/Perl-Template-Sandbox',
             },
         },
     sign => 1,
