@@ -1,5 +1,5 @@
 ---
-abstract: 'Fast template engine sandboxed from your application.'
+abstract: 'Fast pure-perl template engine sandboxed from your application.'
 author:
   - 'Sam Graham <libtemplate-sandbox-perl@illusori.co.uk>'
 build_requires:
@@ -46,4 +46,8 @@ requires:
   Storable: 1.014
 resources:
   license: http://dev.perl.org/licenses/
+  repository:
+    type: git
+    url: git://github.com/illusori/Perl-Template-Sandbox.git
+    web: http://github.com/illusori/Perl-Template-Sandbox
 version: 1.04_01

@@ -2,6 +2,7 @@ Revision history for Template::Sandbox
 
 1.04_01 Version released at .  *** Development version. ***
         Version started at  2010-09-09-15:07.
+        Added GitHub repository info to Build.PL and META.yml.
         Corrected two FIXME error messages in chained operator compilation.
         Updated and added new release-tests in-line with Test::XT.
         Convert to use App::podweaver for documentation.

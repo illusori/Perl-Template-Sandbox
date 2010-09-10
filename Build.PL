@@ -32,6 +32,15 @@ my $build = Module::Build->new(
         'Cache::CacheFactory' => 1.08,
         'Cache::Cache'        => 1.00,
         },
+    meta_merge => {
+        'resources' => {
+            'repository' => {
+                'type'  => 'git',
+                'url'   => 'git://github.com/illusori/Perl-Template-Sandbox.git',
+                'web'   => 'http://github.com/illusori/Perl-Template-Sandbox',
+                },
+            },
+        },
     sign => 1,
     dynamic_config => 0,
     );
