@@ -1,11 +1,15 @@
-#!/usr/bin/perl -T
+#!/usr/bin/perl
 
+# Test that the syntax of our POD documentation is valid
 use strict;
-use warnings;
+BEGIN {
+	$|  = 1;
+	$^W = 1;
+}
 
 my @MODULES = (
-	'Test::Pod::Coverage 1.08',
-	'Pod::Coverage::CountParents',
+	'Pod::Simple 3.07',
+	'Test::Pod 1.26',
 );
 
 # Don't run tests during end-user installs
@@ -23,6 +27,6 @@ foreach my $MODULE ( @MODULES ) {
 	}
 }
 
-all_pod_coverage_ok( { coverage_class => 'Pod::Coverage::CountParents' } );
+all_pod_files_ok();
 
 1;

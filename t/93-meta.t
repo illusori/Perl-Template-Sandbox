@@ -1,11 +1,15 @@
-#!/usr/bin/perl -T
+#!/usr/bin/perl
 
+# Test that our META.yml file matches the specification
 use strict;
-use warnings;
+BEGIN {
+	$|  = 1;
+	$^W = 1;
+}
 
+#  0.13 required for v-string versions.
 my @MODULES = (
-	'Test::Pod::Coverage 1.08',
-	'Pod::Coverage::CountParents',
+	'Test::CPAN::Meta 0.13',
 );
 
 # Don't run tests during end-user installs
@@ -23,6 +27,6 @@ foreach my $MODULE ( @MODULES ) {
 	}
 }
 
-all_pod_coverage_ok( { coverage_class => 'Pod::Coverage::CountParents' } );
+meta_yaml_ok();
 
 1;

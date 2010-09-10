@@ -1,11 +1,14 @@
-#!/usr/bin/perl -T
+#!/usr/bin/perl
 
+# Test that all modules have a version number
 use strict;
-use warnings;
+BEGIN {
+	$|  = 1;
+	$^W = 1;
+}
 
 my @MODULES = (
-	'Test::Pod::Coverage 1.08',
-	'Pod::Coverage::CountParents',
+	'Test::HasVersion 0.012',
 );
 
 # Don't run tests during end-user installs
@@ -23,6 +26,6 @@ foreach my $MODULE ( @MODULES ) {
 	}
 }
 
-all_pod_coverage_ok( { coverage_class => 'Pod::Coverage::CountParents' } );
+all_pm_version_ok();
 
 1;

@@ -2,6 +2,8 @@ Revision history for Template::Sandbox
 
 1.04_01 Version released at .  *** Development version. ***
         Version started at  2010-09-09-15:07.
+        Corrected two FIXME error messages in chained operator compilation.
+        Updated and added new release-tests in-line with Test::XT.
         Convert to use App::podweaver for documentation.
         Build.PL no-longer uses deprecated 'passthrough' Makefile.PL.
         Built-in size() function massaged to work with strings.

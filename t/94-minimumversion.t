@@ -1,11 +1,15 @@
-#!/usr/bin/perl -T
+#!/usr/bin/perl
 
+# Test that our declared minimum Perl version matches our syntax
 use strict;
-use warnings;
+BEGIN {
+	$|  = 1;
+	$^W = 1;
+}
 
 my @MODULES = (
-	'Test::Pod::Coverage 1.08',
-	'Pod::Coverage::CountParents',
+	'Perl::MinimumVersion 1.20',
+	'Test::MinimumVersion 0.008',
 );
 
 # Don't run tests during end-user installs
@@ -23,6 +27,6 @@ foreach my $MODULE ( @MODULES ) {
 	}
 }
 
-all_pod_coverage_ok( { coverage_class => 'Pod::Coverage::CountParents' } );
+all_minimum_version_from_metayml_ok();
 
 1;

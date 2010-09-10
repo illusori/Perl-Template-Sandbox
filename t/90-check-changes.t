@@ -1,11 +1,14 @@
-#!/usr/bin/perl -T
+#!/usr/bin/perl
 
+# Test that Changes has an entry for current version
 use strict;
-use warnings;
+BEGIN {
+	$|  = 1;
+	$^W = 1;
+}
 
 my @MODULES = (
-	'Test::Pod::Coverage 1.08',
-	'Pod::Coverage::CountParents',
+	'Test::CheckChanges 0.08',
 );
 
 # Don't run tests during end-user installs
@@ -23,6 +26,6 @@ foreach my $MODULE ( @MODULES ) {
 	}
 }
 
-all_pod_coverage_ok( { coverage_class => 'Pod::Coverage::CountParents' } );
+ok_changes();
 
 1;

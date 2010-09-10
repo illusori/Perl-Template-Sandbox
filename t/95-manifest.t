@@ -1,17 +1,20 @@
-#!/usr/bin/perl -T
+#!/usr/bin/perl
 
+# Test that the module MANIFEST is up-to-date
 use strict;
-use warnings;
+BEGIN {
+	$|  = 1;
+	$^W = 1;
+}
 
 my @MODULES = (
-	'Test::Pod::Coverage 1.08',
-	'Pod::Coverage::CountParents',
+	'Test::DistManifest 1.003',
 );
 
 # Don't run tests during end-user installs
 use Test::More;
 plan( skip_all => 'Author tests not required for installation' )
-	unless ( $ENV{RELEASE_TESTING} or $ENV{AUTOMATED_TESTING} );
+	unless ( $ENV{RELEASE_TESTING} );
 
 # Load the testing modules
 foreach my $MODULE ( @MODULES ) {
@@ -23,6 +26,6 @@ foreach my $MODULE ( @MODULES ) {
 	}
 }
 
-all_pod_coverage_ok( { coverage_class => 'Pod::Coverage::CountParents' } );
+manifest_ok();
 
 1;
