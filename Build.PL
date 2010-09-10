@@ -34,6 +34,5 @@ my $build = Module::Build->new(
         },
     sign => 1,
     dynamic_config => 0,
-    create_makefile_pl => 'passthrough',
     );
 $build->create_build_script;
