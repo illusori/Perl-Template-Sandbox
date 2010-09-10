@@ -2,8 +2,9 @@ Revision history for Template::Sandbox
 
 1.04_01 Version released at .  *** Development version. ***
         Version started at  2010-09-09-15:07.
+        Changed 91-fixme.t to only check files in MANIFEST.
         Added GitHub repository info to Build.PL and META.yml.
-        Corrected two FIXME error messages in chained operator compilation.
+        Corrected two "fixme" error messages in chained operator compilation.
         Updated and added new release-tests in-line with Test::XT.
         Convert to use App::podweaver for documentation.
         Build.PL no-longer uses deprecated 'passthrough' Makefile.PL.

@@ -22,6 +22,10 @@ foreach my $MODULE ( @MODULES ) {
 	}
 }
 
-run_tests();
+open my $fh, '<', 'MANIFEST' or
+    plan( skip_all => 'Unable to read MANIFEST file' );
+my @manifest = <$fh>;
+my $manifest_regexp = '(?:' . join( '|', map { chomp; "\Q$_\E" } @manifest ) . ')';
+run_tests( filename_match => qr/^(?:\.\/)?$manifest_regexp$/ );
 
 1;
