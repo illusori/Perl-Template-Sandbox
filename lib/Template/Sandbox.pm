@@ -765,11 +765,9 @@ sub get_valid_multiple_constructor_param
 sub new
 {
     my $this = shift;
-    my ( $self, $class, %param, %valid_singular, %valid_multiple );
+    my ( $self, %param, %valid_singular, %valid_multiple );
 
-    $self = {};
-    $class = ref( $this ) || $this;
-    bless $self, $class;
+    $self = bless {}, ref( $this ) || $this;
 
     %valid_singular =
         map { $_ => 1 } $self->get_valid_singular_constructor_param();
@@ -809,14 +807,7 @@ sub initialize
     my ( $self, $param ) = @_;
 
     #  Do this early in case anything needs logging.
-    if( exists $param->{ logger } )
-    {
-        $self->{ logger } = $param->{ logger } if $param->{ logger };
-    }
-    else
-    {
-        $self->{ logger } = Log::Any->get_logger();
-    }
+    $self->{ logger } = $param->{ logger } if exists $param->{ logger };
 
     #  For the paranoid, to prevent other code changing them after
     #  we initialize.
@@ -873,9 +864,11 @@ sub initialize
     $self->{ vmethods } = $param->{ vmethods }
         if exists $param->{ vmethods };
 
-    $self->set_cache( $param->{ cache } )
+    #  No need to use set_cache(), from initialize we're the first set
+    #  so don't need to clear flags.
+    $self->{ cache } = $param->{ cache }
         if exists $param->{ cache };
-    $self->set_template_root( $param->{ template_root } )
+    $self->{ template_root } = $param->{ template_root }
         if exists $param->{ template_root };
     $self->set_template( $param->{ template } )
         if exists $param->{ template };
@@ -889,7 +882,8 @@ sub set_cache
     my ( $self, $cache ) = @_;
 
     $self->{ cache } = $cache;
-    delete $self->{ cache_uses_extended_set };
+    delete $self->{ cache_uses_extended_set }
+        if exists $self->{ cache_uses_extended_set };
 }
 
 sub _cache_uses_extended_set
@@ -967,9 +961,15 @@ sub find_include
 sub cache_key
 {
     my ( $self, $keys ) = @_;
-    local $Storable::canonical = 1;
 
-    return( Digest::MD5::md5_hex( Storable::nfreeze( $keys ) ) );
+    return( Digest::MD5::md5_hex(
+        join( '',
+            map { $_ . ( $keys->{ $_ } || '' ) } sort( keys( %{$keys} ) ) )
+        ) );
+
+#    local $Storable::canonical = 1;
+#
+#    return( Digest::MD5::md5_hex( Storable::nfreeze( $keys ) ) );
 }
 
 sub get_additional_dependencies
@@ -984,82 +984,67 @@ sub set_template
     my ( $self, $filename, $defines ) = @_;
     my ( $cache_key );
 
-#my $start_time = Time::HiRes::time();
-
     #  Shallow copy is safe, keys/values should only be scalars.
-    $defines = $defines ? { %{$defines} } : {};
-    $self->{ defines }        = $defines;
+    $self->{ defines } = $defines = $defines ? { %{$defines} } : {};
     $self->{ special_values } = {};
     delete $self->{ template };
 
-    $self->{ filename }    = $self->find_template( $filename );
-    $defines->{ FILENAME } = $self->{ filename };
+    $defines->{ FILENAME } = $self->{ filename } =
+        $self->find_template( $filename );
+
+    #  $defines at this stage includes all unique compile-time
+    #  parameters that effect the final compiled template, this
+    #  is more than just the filename, so we need to generate
+    #  a simple string key from multiple inputs.
+    return if $self->{ cache } and
+              ( $self->{ template } = $self->{ cache }->get(
+                  $cache_key = $self->cache_key( $defines )
+                  ) );
+
+    my $compiletime = time();  #  Before the compile, to be safe.
+
+    $self->{ dependencies } = $self->get_additional_dependencies();
+
+    #  If we're caching, the validity of the cache depends on the
+    #  last-modified of the template module as well as the template
+    #  files, unless we've been told to ignore it.
+    if( $self->{ cache } and not $self->{ ignore_module_dependencies } )
+    {
+        my ( $class_handle );
+
+        $class_handle = Class::Handle->new( ref( $self ) );
+        push @{$self->{ dependencies }},
+            #  TODO: Ew, ugly and non-portable.
+            grep { defined( $_ ) }
+            map  { s/\:\:/\//g; s/$/\.pm/; $INC{ $_ }; }
+            $class_handle->self_and_super_path();
+    }
+
+    $self->{ template } =
+        $self->_read_template( $self->{ filename }, $defines );
+
+    $self->_compile_template();
 
     if( $self->{ cache } )
     {
-#my $fetchstart = Time::HiRes::time();
-        #  $defines at this stage includes all unique compile-time
-        #  parameters that effect the final compiled template, this
-        #  is more than just the filename, so we need to generate
-        #  a simple string key from multiple inputs.
-        $cache_key = $self->cache_key( $defines );
-        $self->{ template } = $self->{ cache }->get( $cache_key );
-#warn "Cache fetch: " . $self->{ filename } . " " .
-#  sprintf( "%.6fs", Time::HiRes::time() - $fetchstart );
-    }
-
-    unless( $self->{ template } )
-    {
-        my ( $compiletime );
-
-        $compiletime = time();  #  Before the compile, to be safe.
-
-        $self->{ dependencies } = $self->get_additional_dependencies();
-
-        #  If we're caching, the validity of the cache depends on the
-        #  last-modified of the template module as well as the template
-        #  files, unless we've been told to ignore it.
-        if( $self->{ cache } and not $self->{ ignore_module_dependencies } )
-        {
-            my ( $class_handle );
-
-            $class_handle = Class::Handle->new( ref( $self ) );
-            push @{$self->{ dependencies }},
-                #  TODO: Ew, ugly and non-portable.
-                grep { defined( $_ ) }
-                map  { s/\:\:/\//g; s/$/\.pm/; $INC{ $_ }; }
-                $class_handle->self_and_super_path();
-        }
-
-        $self->{ template } =
-            $self->_read_template( $self->{ filename }, $defines );
-
-        $self->_compile_template();
-
-        if( $self->{ cache } )
-        {
-            #  If they're using Cache::CacheFactory we can make use of
-            #  the dependencies and created at timestamps, if not we
-            #  fall back on the basic Cache::Cache style API.
+        #  If they're using Cache::CacheFactory we can make use of
+        #  the dependencies and created at timestamps, if not we
+        #  fall back on the basic Cache::Cache style API.
 #  TODO: wrap compat cache behaviour with our own dependencies checking.
-            if( $self->_cache_uses_extended_set() )
-            {
-                $self->{ cache }->set(
-                    key          => $cache_key,
-                    data         => $self->{ template },
-                    dependencies => $self->{ dependencies },
-                    created_at   => $compiletime,
-                    );
-            }
-            else
-            {
-                $self->{ cache }->set( $cache_key, $self->{ template } );
-            }
+        if( $self->_cache_uses_extended_set() )
+        {
+            $self->{ cache }->set(
+                key          => $cache_key,
+                data         => $self->{ template },
+                dependencies => $self->{ dependencies },
+                created_at   => $compiletime,
+                );
+        }
+        else
+        {
+            $self->{ cache }->set( $cache_key, $self->{ template } );
         }
     }
-
-#CORE::warn( "set_template( $filename ) took " .
-#  sprintf( "%.3f", Time::HiRes::time() - $start_time ) . "s" );
 }
 
 #  TODO: split/merge parts from set_template() above.
@@ -1068,83 +1053,68 @@ sub set_template_string
     my ( $self, $template_string, $defines ) = @_;
     my ( $cache_key );
 
-#my $start_time = Time::HiRes::time();
-
     #  Shallow copy is safe, keys/values should only be scalars.
-    $defines = $defines ? { %{$defines} } : {};
-    $self->{ defines }        = $defines;
+    $self->{ defines } = $defines = $defines ? { %{$defines} } : {};
     $self->{ special_values } = {};
     delete $self->{ template };
 
     #  Erk.  Better way of making this cacheable surely?
-    $self->{ filename }    = 'string:///' . $template_string;
-    $defines->{ FILENAME } = $self->{ filename };
+    $defines->{ FILENAME } = $self->{ filename } =
+        'string:///' . $template_string;
+
+    #  $defines at this stage includes all unique compile-time
+    #  parameters that effect the final compiled template, this
+    #  is more than just the filename, so we need to generate
+    #  a simple string key from multiple inputs.
+    return if $self->{ cache } and
+              ( $self->{ template } = $self->{ cache }->get(
+                  $cache_key = $self->cache_key( $defines )
+                  ) );
+
+    my $compiletime = time();  #  Before the compile, to be safe.
+
+    $self->{ dependencies } = $self->get_additional_dependencies();
+
+    #  If we're caching, the validity of the cache depends on the
+    #  last-modified of the template module as well as the template
+    #  files, unless we've been told to ignore it.
+    if( $self->{ cache } and not $self->{ ignore_module_dependencies } )
+    {
+        my ( $class_handle );
+
+        $class_handle = Class::Handle->new( ref( $self ) );
+        push @{$self->{ dependencies }},
+            #  TODO: Ew, ugly and non-portable.
+            grep { defined( $_ ) }
+            map  { s/\:\:/\//g; s/$/\.pm/; $INC{ $_ }; }
+            $class_handle->self_and_super_path();
+    }
+
+    $self->{ template } =
+        $self->_read_template_from_string( $template_string, $defines );
+
+    $self->_compile_template();
 
     if( $self->{ cache } )
     {
-#my $fetchstart = Time::HiRes::time();
-        #  $defines at this stage includes all unique compile-time
-        #  parameters that effect the final compiled template, this
-        #  is more than just the filename, so we need to generate
-        #  a simple string key from multiple inputs.
-        $cache_key = $self->cache_key( $defines );
-        $self->{ template } = $self->{ cache }->get( $cache_key );
-#warn "Cache fetch: " . $self->{ filename } . " " .
-#  sprintf( "%.6fs", Time::HiRes::time() - $fetchstart );
-    }
-
-    unless( $self->{ template } )
-    {
-        my ( $compiletime );
-
-        $compiletime = time();  #  Before the compile, to be safe.
-
-        $self->{ dependencies } = $self->get_additional_dependencies();
-
-        #  If we're caching, the validity of the cache depends on the
-        #  last-modified of the template module as well as the template
-        #  files, unless we've been told to ignore it.
-        if( $self->{ cache } and not $self->{ ignore_module_dependencies } )
-        {
-            my ( $class_handle );
-
-            $class_handle = Class::Handle->new( ref( $self ) );
-            push @{$self->{ dependencies }},
-                #  TODO: Ew, ugly and non-portable.
-                grep { defined( $_ ) }
-                map  { s/\:\:/\//g; s/$/\.pm/; $INC{ $_ }; }
-                $class_handle->self_and_super_path();
-        }
-
-        $self->{ template } =
-            $self->_read_template_from_string( $template_string, $defines );
-
-        $self->_compile_template();
-
-        if( $self->{ cache } )
-        {
-            #  If they're using Cache::CacheFactory we can make use of
-            #  the dependencies and created at timestamps, if not we
-            #  fall back on the basic Cache::Cache style API.
+        #  If they're using Cache::CacheFactory we can make use of
+        #  the dependencies and created at timestamps, if not we
+        #  fall back on the basic Cache::Cache style API.
 #  TODO: wrap compat cache behaviour with our own dependencies checking.
-            if( $self->_cache_uses_extended_set() )
-            {
-                $self->{ cache }->set(
-                    key          => $cache_key,
-                    data         => $self->{ template },
-                    dependencies => $self->{ dependencies },
-                    created_at   => $compiletime,
-                    );
-            }
-            else
-            {
-                $self->{ cache }->set( $cache_key, $self->{ template } );
-            }
+        if( $self->_cache_uses_extended_set() )
+        {
+            $self->{ cache }->set(
+                key          => $cache_key,
+                data         => $self->{ template },
+                dependencies => $self->{ dependencies },
+                created_at   => $compiletime,
+                );
+        }
+        else
+        {
+            $self->{ cache }->set( $cache_key, $self->{ template } );
         }
     }
-
-#CORE::warn( "set_template( $filename ) took " .
-#  sprintf( "%.3f", Time::HiRes::time() - $start_time ) . "s" );
 }
 
 sub _error_message
@@ -1196,11 +1166,19 @@ sub _error_message
     return( $error );
 }
 
+sub _get_logger
+{
+    my ( $self ) = @_;
+
+    $self->{ logger } = Log::Any->get_logger() unless exists $self->{ logger };
+}
+
 sub log_error
 {
     my ( $self, $message ) = @_;
 
     return unless ref( $self );  #  No logging if class method.
+    $self->_get_logger();
     $self->{ logger }->error( $message ) if $self->{ logger };
 }
 
@@ -1209,6 +1187,7 @@ sub log_warning
     my ( $self, $message ) = @_;
 
     return unless ref( $self );  #  No logging if class method.
+    $self->_get_logger();
     $self->{ logger }->warning( $message ) if $self->{ logger };
 }
 
@@ -3146,11 +3125,11 @@ sub _eval_var
                     "(from '$originals->[ $i ]') " : "" ) .
                 "in '$original'" )
                 unless $leaf =~ /^\d+$/o;
-            $val = defined( $val->[ $leaf ] ) ? $val->[ $leaf ] : undef;
+            $val = $val->[ $leaf ];
         }
         else
         {
-            $val = defined( $val->{ $leaf } ) ? $val->{ $leaf } : undef;
+            $val = $val->{ $leaf };
         }
     }
 

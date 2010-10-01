@@ -10,6 +10,8 @@ Revision history for Template::Sandbox
         Build.PL no-longer uses deprecated 'passthrough' Makefile.PL.
         Built-in size() function massaged to work with strings.
         .git added to MANIFEST.SKIP.
+        Optimized cache_key() and constructor to get memory cache performance
+            closer to instance reuse performance.
 
 1.04    Version released at 2010-05-11-10:03.
         Version started at  2010-05-11-09:56.
