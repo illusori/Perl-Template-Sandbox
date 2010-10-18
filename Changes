@@ -1,6 +1,6 @@
 Revision history for Template::Sandbox
 
-1.04_01 Version released at .  *** Development version. ***
+1.04_01 Version released at 2010-10-18-10:56.  *** Development version. ***
         Version started at  2010-09-09-15:07.
         Changed 91-fixme.t to only check files in MANIFEST.
         Added GitHub repository info to Build.PL and META.yml.
