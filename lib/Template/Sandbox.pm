@@ -551,7 +551,7 @@ BEGIN
 {
     use Exporter   ();
 
-    $Template::Sandbox::VERSION     = '1.04_01';
+    $Template::Sandbox::VERSION     = '1.04_02';
     @Template::Sandbox::ISA         = qw( Exporter );
 
     @Template::Sandbox::EXPORT      = qw();
@@ -3623,7 +3623,9 @@ Template::Sandbox - Fast pure-perl template engine sandboxed from your applicati
 
 =head1 VERSION
 
-version 1.04_01
+version 1.04_02
+
+=for readme stop
 
 =head1 SYNOPSIS
 
@@ -3677,6 +3679,8 @@ version 1.04_01
    <: endfor :>
    </table>
 
+=for readme continue
+
 =head1 DESCRIPTION
 
 L<Template::Sandbox> is Yet Another Templating module, designed primarily
@@ -3710,6 +3714,21 @@ debugging information in case of errors.
 
 Furthermore, L<Template::Sandbox> is designed to be subclassable should
 you wish to customize or extend other of its features.
+
+=begin readme
+
+=head1 INSTALLATION
+
+To install this module, run the following commands:
+
+  perl Build.PL
+  ./Build
+  ./Build test
+  ./Build install
+
+=end readme
+
+=for readme stop
 
 =head1 IMPORTANT CONCEPTS AND TERMINOLOGY
 
@@ -6618,6 +6637,8 @@ L<Template::Sandbox::Library>, L<Template::Sandbox::NumberFunctions>,
 L<Template::Sandbox::StringFunctions>,
 L<Cache::CacheFactory>, L<Cache::Cache>
 
+=for readme continue
+
 =head1 SUPPORT
 
 You can find documentation for this module with the perldoc command.
@@ -6659,7 +6680,7 @@ Sam Graham <libtemplate-sandbox-perl BLAHBLAH illusori.co.uk>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2005-2010 by Sam Graham <libtemplate-sandbox-perl BLAHBLAH illusori.co.uk>.
+This software is copyright (c) 2005-2011 by Sam Graham <libtemplate-sandbox-perl BLAHBLAH illusori.co.uk>.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

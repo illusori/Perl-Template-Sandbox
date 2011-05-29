@@ -8,7 +8,7 @@ use base 'Template::Sandbox::Library';
 
 use Template::Sandbox qw/:function_sugar/;
 
-$Template::Sandbox::NumberFunctions::VERSION = '1.04_01';
+$Template::Sandbox::NumberFunctions::VERSION = '1.04_02';
 
 #  From perlfaq5: add thousands-commas to number.
 #  Yes it doesn't respect locale.
@@ -78,7 +78,7 @@ Template::Sandbox::NumberFunctions - Basic number functions library for Template
 
 =head1 VERSION
 
-version 1.04_01
+version 1.04_02
 
 =head1 SYNOPSIS
 
@@ -231,7 +231,7 @@ Sam Graham <libtemplate-sandbox-perl BLAHBLAH illusori.co.uk>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2005-2010 by Sam Graham <libtemplate-sandbox-perl BLAHBLAH illusori.co.uk>.
+This software is copyright (c) 2005-2011 by Sam Graham <libtemplate-sandbox-perl BLAHBLAH illusori.co.uk>.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

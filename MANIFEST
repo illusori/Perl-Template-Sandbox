@@ -1,6 +1,5 @@
 Build.PL
 Changes
-COPYING
 lib/Template/Sandbox.pm
 lib/Template/Sandbox/Library.pm
 lib/Template/Sandbox/NumberFunctions.pm
@@ -74,3 +73,4 @@ t/test_templates/template_subdir/template_in_a_subdir.txt
 t/test_templates/unreadable.txt
 t/test_templates/unreadable_include.txt
 weaver.ini
+META.json

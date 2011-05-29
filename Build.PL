@@ -37,6 +37,7 @@ my $build = Module::Build->new(
             'repository' => 'http://github.com/illusori/Perl-Template-Sandbox',
             },
         },
+    create_readme => 1,
     sign => 1,
     dynamic_config => 0,
     );

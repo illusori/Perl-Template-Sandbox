@@ -1,69 +1,84 @@
-Template-Sandbox
+NAME
+    Template::Sandbox - Fast pure-perl template engine sandboxed from your
+    application.
 
-Template::Sandbox is Yet Another Templating module, designed primarily
-for use in a webserver environment but usable anywhere, providing a more
-secure "sandboxed" environment than most templating systems.
+VERSION
+    version 1.04_02
 
-The core design philosiphy for Template::Sandbox is that the template
-logic should have no access outside the template beyond that which you
-choose to permit it, this is frequently known as sandboxing.
+DESCRIPTION
+    Template::Sandbox is Yet Another Templating module, designed primarily
+    for use in a webserver environment but usable anywhere, providing a more
+    secure "sandboxed" environment than most templating systems.
 
-Unlike many other template systems, available on CPAN or in other languages,
-Template::Sandbox doesn't give the template access to the global variables
-of your application or to the core functions of the language.
+    The core design philosophy for Template::Sandbox is that the template
+    logic should have no access outside the template beyond that which you
+    choose to permit it, this is frequently known as sandboxing.
 
-This means that your template authors only have access to the data and
-functionality that your application developers choose to grant them,
-this encourages both to work with "published" interfaces between the
-two systems - your template authors can't reach into the application's
-internal-only data, and so your application developers can change that
-internal data without worrying that the templates will stop working or
-expose confidential information.
+    Unlike many other template systems, available on CPAN or in other
+    languages, Template::Sandbox doesn't give the template access to the
+    global variables of your application or to the core functions of the
+    language.
 
-Template::Sandbox also provides the usual gamut of behaviours and
-optional features: caching compiled templates, includes, flow control,
-embedded expressions, cascading template candidates, and useful
-debugging information in case of errors.
+    This means that your template authors only have access to the data and
+    functionality that your application developers choose to grant them,
+    this encourages both to work with "published" interfaces between the two
+    systems - your template authors can't reach into the application's
+    internal-only data, and so your application developers can change that
+    internal data without worrying that the templates will stop working or
+    expose confidential information.
 
-Furthermore, Template::Sandbox is designed to be subclassable should
-you wish to customize or extend other of its features.
+    Template::Sandbox also provides exceptional performance, ranking among
+    the fastest of the fully-featured template engines that don't rely on
+    embedding perl within the templates.
 
+    Template::Sandbox also provides the usual gamut of behaviours and
+    optional features: caching compiled templates, includes, flow control,
+    embedded expressions, cascading template candidates, and useful
+    debugging information in case of errors.
+
+    Furthermore, Template::Sandbox is designed to be subclassable should you
+    wish to customize or extend other of its features.
 
 INSTALLATION
+    To install this module, run the following commands:
 
-To install this module, run the following commands:
+      perl Build.PL
+      ./Build
+      ./Build test
+      ./Build install
 
-	perl Build.PL
-	./Build
-	./Build test
-	./Build install
+SUPPORT
+    You can find documentation for this module with the perldoc command.
 
-SUPPORT AND DOCUMENTATION
+        perldoc Template::Sandbox
 
-After installing, you can find documentation for this module with the
-perldoc command.
+    You can also look for information at:
 
-    perldoc Template::Sandbox
-
-You can also look for information at:
-
-    RT, CPAN's request tracker
+    * RT: CPAN's request tracker
         http://rt.cpan.org/NoAuth/Bugs.html?Dist=Template-Sandbox
 
-    AnnoCPAN, Annotated CPAN documentation
+    * AnnoCPAN: Annotated CPAN documentation
         http://annocpan.org/dist/Template-Sandbox
 
-    CPAN Ratings
+    * CPAN Ratings
         http://cpanratings.perl.org/d/Template-Sandbox
 
-    Search CPAN
+    * Search CPAN
         http://search.cpan.org/dist/Template-Sandbox
 
+THANKS
+    Thanks to Paul Seamons for creating the benchmark script distributed
+    with Template::Alloy, the benchmarks in the "PERFORMANCE CONSIDERATIONS
+    AND METRICS" section were generated with a modified version of this
+    script.
 
-COPYRIGHT AND LICENCE
+AUTHOR
+    Sam Graham <libtemplate-sandbox-perl BLAHBLAH illusori.co.uk>
 
-Copyright (C) 2006-2009 Sam Graham
+COPYRIGHT AND LICENSE
+    This software is copyright (c) 2005-2011 by Sam Graham
+    <libtemplate-sandbox-perl BLAHBLAH illusori.co.uk>.
 
-This program is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.
+    This is free software; you can redistribute it and/or modify it under
+    the same terms as the Perl 5 programming language system itself.
 
